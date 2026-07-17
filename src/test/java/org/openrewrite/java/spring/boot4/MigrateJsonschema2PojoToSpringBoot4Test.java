@@ -160,4 +160,34 @@ class MigrateJsonschema2PojoToSpringBoot4Test implements RewriteTest {
           )
         );
     }
+
+    @Test
+    void doNotChangeAlreadyMigratedConfiguration() {
+        rewriteRun(
+          pomXml(
+            """
+              <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>demo</artifactId>
+                  <version>1.0.0</version>
+                  <build>
+                      <plugins>
+                          <plugin>
+                              <groupId>org.jsonschema2pojo</groupId>
+                              <artifactId>jsonschema2pojo-maven-plugin</artifactId>
+                              <version>1.3.2</version>
+                              <configuration>
+                                  <annotationStyle>jackson3</annotationStyle>
+                                  <includeJsr303Annotations>true</includeJsr303Annotations>
+                                  <useJakartaValidation>true</useJakartaValidation>
+                              </configuration>
+                          </plugin>
+                      </plugins>
+                  </build>
+              </project>
+              """
+          )
+        );
+    }
 }
