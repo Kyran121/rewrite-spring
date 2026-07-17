@@ -69,7 +69,8 @@ public class MigrateJsonschema2PojoToSpringBoot4 extends Recipe {
                         .map(configuration -> {
                             String style = configuration.getChildValue("annotationStyle").orElse("jackson2");
                             boolean migrateJackson = JACKSON_STYLES.contains(style) && !"jackson3".equals(style);
-                            boolean migrateValidation = "true".equals(configuration.getChildValue("includeJsr303Annotations").orElse(null)) &&
+                            boolean migrateValidation =
+                                    "true".equals(configuration.getChildValue("includeJsr303Annotations").orElse(null)) &&
                                     !"true".equals(configuration.getChildValue("useJakartaValidation").orElse(null));
                             return migrateJackson || migrateValidation;
                         })
