@@ -41,68 +41,27 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("explicit-maven-dependencies",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                            <version>4.5.13</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-core</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-reactivestreams</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-crypt</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>bson</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>bson-record-codec</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-legacy</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """,
-              spec -> spec.after(actual ->
-                assertThat(actual)
-                  .containsPattern("<artifactId>spring-data-mongodb</artifactId>\\s*<version>5\\.0\\.\\d+</version>")
-                  .containsPattern("<artifactId>mongodb-driver-core</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .containsPattern("<artifactId>mongodb-driver-sync</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .containsPattern("<artifactId>mongodb-driver-reactivestreams</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .containsPattern("<artifactId>mongodb-crypt</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .containsPattern("<artifactId>bson</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .containsPattern("<artifactId>bson-record-codec</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .containsPattern("<artifactId>mongodb-driver-legacy</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .doesNotContain("<artifactId>mongodb-driver-sync</artifactId>\n            <version>4.11.5</version>")
-                  .actual())
+              pom("", "", String.join("",
+                dependency("org.springframework.data", "spring-data-mongodb", "4.5.13"),
+                dependency("org.mongodb", "mongodb-driver-core", "4.11.5"),
+                dependency("org.mongodb", "mongodb-driver-sync", "4.11.5"),
+                dependency("org.mongodb", "mongodb-driver-reactivestreams", "4.11.5"),
+                dependency("org.mongodb", "mongodb-crypt", "1.11.0"),
+                dependency("org.mongodb", "bson", "4.11.5"),
+                dependency("org.mongodb", "bson-record-codec", "4.11.5"),
+                dependency("org.mongodb", "mongodb-driver-legacy", "4.11.5")
+              )),
+              spec -> spec.after(actual -> {
+                  assertVersion(actual, "spring-data-mongodb", "5\\.0\\.\\d+");
+                  assertVersion(actual, "mongodb-driver-core", "5\\.6\\.\\d+");
+                  assertVersion(actual, "mongodb-driver-sync", "5\\.6\\.\\d+");
+                  assertVersion(actual, "mongodb-driver-reactivestreams", "5\\.6\\.\\d+");
+                  assertVersion(actual, "mongodb-crypt", "5\\.6\\.\\d+");
+                  assertVersion(actual, "bson", "5\\.6\\.\\d+");
+                  assertVersion(actual, "bson-record-codec", "5\\.6\\.\\d+");
+                  assertVersion(actual, "mongodb-driver-legacy", "5\\.6\\.\\d+");
+                  return actual;
+              })
             ),
             java("class Application {}")
           )
@@ -147,48 +106,17 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("mongodb-driver-bom",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencyManagement>
-                        <dependencies>
-                            <dependency>
-                                <groupId>org.mongodb</groupId>
-                                <artifactId>mongodb-driver-bom</artifactId>
-                                <version>5.5.1</version>
-                                <type>pom</type>
-                                <scope>import</scope>
-                            </dependency>
-                        </dependencies>
-                    </dependencyManagement>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                            <version>4.5.13</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>bson-record-codec</artifactId>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """,
-              spec -> spec.after(actual ->
-                assertThat(actual)
-                  .containsPattern("<artifactId>mongodb-driver-bom</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .contains("<artifactId>mongodb-driver-sync</artifactId>")
-                  .doesNotContainPattern("<artifactId>mongodb-driver-sync</artifactId>\\s*<version>")
-                  .contains("<artifactId>bson-record-codec</artifactId>")
-                  .doesNotContainPattern("<artifactId>bson-record-codec</artifactId>\\s*<version>")
-                  .actual())
+              pom("", mongoDbBom("5.5.1"), String.join("",
+                dependency("org.springframework.data", "spring-data-mongodb", "4.5.13"),
+                versionlessDependency("org.mongodb", "mongodb-driver-sync"),
+                versionlessDependency("org.mongodb", "bson-record-codec")
+              )),
+              spec -> spec.after(actual -> {
+                  assertVersion(actual, "mongodb-driver-bom", "5\\.6\\.\\d+");
+                  assertVersionless(actual, "mongodb-driver-sync");
+                  assertVersionless(actual, "bson-record-codec");
+                  return actual;
+              })
             ),
             java("class Application {}")
           )
@@ -200,29 +128,10 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("managed-dependencies",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <parent>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-starter-parent</artifactId>
-                        <version>4.0.7</version>
-                    </parent>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """
+              pom(bootParent("4.0.7"), "", String.join("",
+                versionlessDependency("org.springframework.data", "spring-data-mongodb"),
+                versionlessDependency("org.mongodb", "mongodb-driver-sync")
+              ))
             ),
             java("class Application {}")
           )
@@ -234,54 +143,15 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("managed-overrides",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <parent>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-starter-parent</artifactId>
-                        <version>4.0.7</version>
-                    </parent>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                            <version>4.5.13</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """,
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <parent>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-starter-parent</artifactId>
-                        <version>4.0.7</version>
-                    </parent>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """
+              pom(bootParent("4.0.7"), "", String.join("",
+                dependency("org.springframework.data", "spring-data-mongodb", "4.5.13"),
+                dependency("org.mongodb", "mongodb-driver-sync", "4.11.5")
+              )),
+              spec -> spec.after(actual -> {
+                  assertVersionless(actual, "spring-data-mongodb");
+                  assertVersionless(actual, "mongodb-driver-sync");
+                  return actual;
+              })
             ),
             java("class Application {}")
           )
@@ -293,36 +163,15 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("boot-starter-with-driver-override",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <parent>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-starter-parent</artifactId>
-                        <version>3.5.0</version>
-                    </parent>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.boot</groupId>
-                            <artifactId>spring-boot-starter-data-mongodb</artifactId>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """,
-              spec -> spec.after(actual ->
-                assertThat(actual)
-                  .contains("<artifactId>spring-boot-starter-data-mongodb</artifactId>")
-                  .doesNotContain("<artifactId>spring-boot-starter-data-mongodb</artifactId>\n            <version>")
-                  .containsPattern("<artifactId>mongodb-driver-sync</artifactId>\\s*<version>5\\.6\\.\\d+</version>")
-                  .actual())
+              pom(bootParent("3.5.0"), "", String.join("",
+                versionlessDependency("org.springframework.boot", "spring-boot-starter-data-mongodb"),
+                dependency("org.mongodb", "mongodb-driver-sync", "4.11.5")
+              )),
+              spec -> spec.after(actual -> {
+                  assertVersionless(actual, "spring-boot-starter-data-mongodb");
+                  assertVersion(actual, "mongodb-driver-sync", "5\\.6\\.\\d+");
+                  return actual;
+              })
             ),
             java("class Application {}")
           )
@@ -334,26 +183,10 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("forward-overrides",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                            <version>5.1.0</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                            <version>5.8.0</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """
+              pom("", "", String.join("",
+                dependency("org.springframework.data", "spring-data-mongodb", "5.1.0"),
+                dependency("org.mongodb", "mongodb-driver-sync", "5.8.0")
+              ))
             ),
             java("class Application {}")
           )
@@ -365,54 +198,22 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("other-jvm-drivers",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.springframework.data</groupId>
-                            <artifactId>spring-data-mongodb</artifactId>
-                            <version>4.5.13</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongo-java-driver</artifactId>
-                            <version>3.12.14</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-kotlin-coroutine</artifactId>
-                            <version>5.5.1</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-kotlin-sync</artifactId>
-                            <version>5.5.1</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>bson-kotlin</artifactId>
-                            <version>5.5.1</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mongodb.scala</groupId>
-                            <artifactId>mongo-scala-driver_2.13</artifactId>
-                            <version>5.5.1</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """,
-              spec -> spec.after(actual ->
-                assertThat(actual)
-                  .contains("<artifactId>mongo-java-driver</artifactId>\n            <version>3.12.14</version>")
-                  .contains("<artifactId>mongodb-driver-kotlin-coroutine</artifactId>\n            <version>5.5.1</version>")
-                  .contains("<artifactId>mongodb-driver-kotlin-sync</artifactId>\n            <version>5.5.1</version>")
-                  .contains("<artifactId>bson-kotlin</artifactId>\n            <version>5.5.1</version>")
-                  .contains("<artifactId>mongo-scala-driver_2.13</artifactId>\n            <version>5.5.1</version>")
-                  .actual())
+              pom("", "", String.join("",
+                dependency("org.springframework.data", "spring-data-mongodb", "4.5.13"),
+                dependency("org.mongodb", "mongo-java-driver", "3.12.14"),
+                dependency("org.mongodb", "mongodb-driver-kotlin-coroutine", "5.5.1"),
+                dependency("org.mongodb", "mongodb-driver-kotlin-sync", "5.5.1"),
+                dependency("org.mongodb", "bson-kotlin", "5.5.1"),
+                dependency("org.mongodb.scala", "mongo-scala-driver_2.13", "5.5.1")
+              )),
+              spec -> spec.after(actual -> {
+                  assertVersion(actual, "mongo-java-driver", "3\\.12\\.14");
+                  assertVersion(actual, "mongodb-driver-kotlin-coroutine", "5\\.5\\.1");
+                  assertVersion(actual, "mongodb-driver-kotlin-sync", "5\\.5\\.1");
+                  assertVersion(actual, "bson-kotlin", "5\\.5\\.1");
+                  assertVersion(actual, "mongo-scala-driver_2.13", "5\\.5\\.1");
+                  return actual;
+              })
             ),
             java("class Application {}")
           )
@@ -424,24 +225,82 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
         rewriteRun(
           mavenProject("driver-only",
             pomXml(
-              """
-                <project>
-                    <modelVersion>4.0.0</modelVersion>
-                    <groupId>com.example</groupId>
-                    <artifactId>example</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.mongodb</groupId>
-                            <artifactId>mongodb-driver-sync</artifactId>
-                            <version>4.11.5</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """
+              pom("", "", dependency("org.mongodb", "mongodb-driver-sync", "4.11.5"))
             ),
             java("class Application {}")
           )
         );
+    }
+
+    private static String pom(String parent, String dependencyManagement, String dependencies) {
+        return """
+          <project>
+              <modelVersion>4.0.0</modelVersion>
+              %s
+              <groupId>com.example</groupId>
+              <artifactId>example</artifactId>
+              <version>1.0.0</version>
+              %s
+              <dependencies>
+                  %s
+              </dependencies>
+          </project>
+          """.formatted(parent, dependencyManagement, dependencies);
+    }
+
+    private static String bootParent(String version) {
+        return """
+          <parent>
+              <groupId>org.springframework.boot</groupId>
+              <artifactId>spring-boot-starter-parent</artifactId>
+              <version>%s</version>
+          </parent>
+          """.formatted(version);
+    }
+
+    private static String mongoDbBom(String version) {
+        return """
+          <dependencyManagement>
+              <dependencies>
+                  <dependency>
+                      <groupId>org.mongodb</groupId>
+                      <artifactId>mongodb-driver-bom</artifactId>
+                      <version>%s</version>
+                      <type>pom</type>
+                      <scope>import</scope>
+                  </dependency>
+              </dependencies>
+          </dependencyManagement>
+          """.formatted(version);
+    }
+
+    private static String dependency(String groupId, String artifactId, String version) {
+        return """
+          <dependency>
+              <groupId>%s</groupId>
+              <artifactId>%s</artifactId>
+              <version>%s</version>
+          </dependency>
+          """.formatted(groupId, artifactId, version);
+    }
+
+    private static String versionlessDependency(String groupId, String artifactId) {
+        return """
+          <dependency>
+              <groupId>%s</groupId>
+              <artifactId>%s</artifactId>
+          </dependency>
+          """.formatted(groupId, artifactId);
+    }
+
+    private static void assertVersion(String pom, String artifactId, String versionPattern) {
+        assertThat(pom).containsPattern(
+          "<artifactId>" + artifactId + "</artifactId>\\s*<version>" + versionPattern + "</version>");
+    }
+
+    private static void assertVersionless(String pom, String artifactId) {
+        assertThat(pom)
+          .contains("<artifactId>" + artifactId + "</artifactId>")
+          .doesNotContainPattern("<artifactId>" + artifactId + "</artifactId>\\s*<version>");
     }
 }
