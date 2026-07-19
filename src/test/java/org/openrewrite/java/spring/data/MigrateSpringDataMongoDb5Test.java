@@ -136,6 +136,65 @@ class MigrateSpringDataMongoDb5Test implements RewriteTest {
     }
 
     @Test
+    void removesOverridesThatBecomeRedundantWithBootManagement() {
+        rewriteRun(
+          mavenProject("managed-overrides",
+            pomXml(
+              """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <parent>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-parent</artifactId>
+                        <version>4.0.7</version>
+                    </parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>example</artifactId>
+                    <version>1.0.0</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.springframework.data</groupId>
+                            <artifactId>spring-data-mongodb</artifactId>
+                            <version>4.5.13</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.mongodb</groupId>
+                            <artifactId>mongodb-driver-sync</artifactId>
+                            <version>4.11.5</version>
+                        </dependency>
+                    </dependencies>
+                </project>
+                """,
+              """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <parent>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-starter-parent</artifactId>
+                        <version>4.0.7</version>
+                    </parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>example</artifactId>
+                    <version>1.0.0</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.springframework.data</groupId>
+                            <artifactId>spring-data-mongodb</artifactId>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.mongodb</groupId>
+                            <artifactId>mongodb-driver-sync</artifactId>
+                        </dependency>
+                    </dependencies>
+                </project>
+                """
+            ),
+            java("class Application {}")
+          )
+        );
+    }
+
+    @Test
     void upgradesDriverOverrideWhenSpringDataMongoDbIsTransitive() {
         rewriteRun(
           mavenProject("boot-starter-with-driver-override",
