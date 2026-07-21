@@ -33,7 +33,7 @@ jobs:
           --tests org.openrewrite.java.spring.data.UpgradeSpringData_4_0Test
           --stacktrace
 
-  full-build:
+  generated-metadata-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,6 +45,10 @@ jobs:
           java-version: "21"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+      - name: Generate recipe metadata
+        run: |
+          ./gradlew recipeCsvGenerate
+          git diff -- src/main/resources/META-INF/rewrite/recipes.csv > recipes.diff
       - name: Run repository build
         shell: bash
         run: |
@@ -53,10 +57,13 @@ jobs:
           status=$?
           tail -n 400 build.log
           exit "$status"
-      - name: Upload build log
+      - name: Upload diagnostics and metadata
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mongodb5-build-log
-          path: build.log
+          name: mongodb5-generated-metadata-build
+          path: |
+            build.log
+            recipes.diff
+            src/main/resources/META-INF/rewrite/recipes.csv
           if-no-files-found: error
