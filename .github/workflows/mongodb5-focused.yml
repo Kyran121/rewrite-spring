@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - ci-mongodb5-focused
+  pull_request:
+    branches:
+      - main
   workflow_dispatch: {}
 
 permissions:
