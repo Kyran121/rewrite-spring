@@ -15,10 +15,10 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout feature branch
+      - name: Checkout rebased feature branch
         uses: actions/checkout@v7
         with:
-          ref: migrate-spring-data-mongodb-5
+          ref: migrate-spring-data-mongodb-5-rebased
           fetch-depth: 0
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -40,4 +40,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/main/resources/META-INF/rewrite/recipes.csv
           git commit -m "Update recipe metadata for MongoDB migration"
-          git push origin HEAD:migrate-spring-data-mongodb-5
+          git push origin HEAD:migrate-spring-data-mongodb-5-rebased
