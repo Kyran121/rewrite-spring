@@ -1,0 +1,58 @@
+---
+name: Validate MongoDB 5 feature branch
+
+on:
+  push:
+    branches:
+      - ci-mongodb5-focused
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  feature-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: migrate-spring-data-mongodb-5
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Validate recipe metadata completeness
+        run: ./gradlew recipeCsvValidateCompleteness --stacktrace
+      - name: Run focused MongoDB tests
+        run: >-
+          ./gradlew test
+          --tests org.openrewrite.java.spring.data.MigrateSpringDataMongoDb5Test
+          --tests org.openrewrite.java.spring.data.UpgradeSpringData_4_0Test
+          --stacktrace
+
+  upstream-yaml-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upstream main
+        uses: actions/checkout@v7
+        with:
+          repository: openrewrite/rewrite-spring
+          ref: main
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Run unrelated failing tests on upstream main
+        run: >-
+          ./gradlew test
+          --tests org.openrewrite.java.spring.SeparateApplicationYamlByProfileTest.mergeIntoExistingProfileFilePreservesFormat
+          --tests org.openrewrite.java.spring.SeparateApplicationYamlByProfileTest.mergeIntoExistingProfileFile
+          --stacktrace
