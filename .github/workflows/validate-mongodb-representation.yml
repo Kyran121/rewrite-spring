@@ -4,10 +4,7 @@ name: validate MongoDB representation recipe
 on:
   pull_request:
     branches:
-      - migrate-spring-data-mongodb-5
-  push:
-    branches:
-      - detect-mongodb-value-representations
+      - validation-mongodb-representation-base
   workflow_dispatch: {}
 
 permissions:
