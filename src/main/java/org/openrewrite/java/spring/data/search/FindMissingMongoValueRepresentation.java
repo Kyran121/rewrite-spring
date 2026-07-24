@@ -69,9 +69,8 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
 
     @Getter
     final String description = "Find explicitly MongoDB-mapped UUID, BigInteger, and BigDecimal fields that require an " +
-            "explicit representation when migrating to Spring Data MongoDB 5. The recipe adds project-level " +
-            "configuration diagnostics and records every affected field in a data table without choosing a storage " +
-            "representation.";
+            "explicit representation when migrating to Spring Data MongoDB 5. The recipe reports affected fields " +
+            "without choosing a storage representation.";
 
     @Override
     public Accumulator getInitialValue(ExecutionContext ctx) {
