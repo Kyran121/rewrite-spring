@@ -80,10 +80,16 @@ final class MongoValueRepresentationDiagnostics {
 
         SourceFile changed = source;
         if (addUuid) {
-            changed = addCommentedProperty(changed, ValueKind.UUID, ctx);
+            changed = addProperty(changed, ValueKind.UUID, ctx);
         }
         if (addBigNumber) {
-            changed = addCommentedProperty(changed, ValueKind.BIG_NUMBER, ctx);
+            changed = addProperty(changed, ValueKind.BIG_NUMBER, ctx);
+        }
+        if (addUuid) {
+            changed = commentOutProperty(changed, ValueKind.UUID, ctx);
+        }
+        if (addBigNumber) {
+            changed = commentOutProperty(changed, ValueKind.BIG_NUMBER, ctx);
         }
         if (!issues.isEmpty()) {
             changed = markConfigurationIssues(changed, issues, ctx);
@@ -120,19 +126,22 @@ final class MongoValueRepresentationDiagnostics {
         return marked.withMarkers(marked.getMarkers().addIfAbsent(new ProjectDiagnostic(Tree.randomId())));
     }
 
-    private static SourceFile addCommentedProperty(SourceFile source, ValueKind kind, ExecutionContext ctx) {
+    private static SourceFile addProperty(SourceFile source, ValueKind kind, ExecutionContext ctx) {
         String path = source.getSourcePath().toString().replace('\\', '/');
-        SourceFile withProperty = (SourceFile) new AddSpringProperty(
+        return (SourceFile) new AddSpringProperty(
                 kind.configurationProperty, REPRESENTATION_PLACEHOLDER, null, Collections.singletonList(path))
                 .getVisitor().visitNonNull(source, ctx);
-        if (withProperty instanceof Properties.File) {
+    }
+
+    private static SourceFile commentOutProperty(SourceFile source, ValueKind kind, ExecutionContext ctx) {
+        if (source instanceof Properties.File) {
             return (SourceFile) new AddPropertyComment(
                     kind.configurationProperty, kind.missingPropertyComment, true)
-                    .getVisitor().visitNonNull(withProperty, ctx);
+                    .getVisitor().visitNonNull(source, ctx);
         }
         return (SourceFile) new CommentOutProperty(
                 kind.configurationProperty, kind.missingPropertyComment, true)
-                .getVisitor().visitNonNull(withProperty, ctx);
+                .getVisitor().visitNonNull(source, ctx);
     }
 
     private static SourceFile markConfigurationIssues(SourceFile source, List<ConfigurationIssue> issues,
