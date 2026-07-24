@@ -52,20 +52,40 @@ Note: Recompile with -Xlint:unchecked for details.
 > Task :test
 
 FindMissingMongoValueRepresentationTest > placesCommentedDiagnosticsInMainYamlFile() FAILED
-    java.lang.AssertionError: 
-    Expecting actual:
+    org.opentest4j.AssertionFailedError: [Unexpected result in "app/src/main/resources/application.yml":
+    diff --git a/app/src/main/resources/application.yml b/app/src/main/resources/application.yml
+    index f81b157..9dc7542 100644
+    --- a/app/src/main/resources/application.yml
+    +++ b/app/src/main/resources/application.yml
+    @@ -4,4 +4,4 @@ 
+     # Choose the UUID representation matching the existing BSON data.
+     # spring.mongodb.representation.uuid: <representation>
+     # Choose the big-number representation matching the existing BSON data.
+    -# spring.data.mongodb.representation.big-decimal: <representation>
+    \ No newline at end of file
+    +# spring.data.mongodb.representation.big-decimal: <representation>
+    ] 
+    expected: 
       "spring:
-      application:
-        name: example
-            # Choose the big-number representation matching the existing BSON data.
-            # big-decimal: <representation>"
-    to contain:
-      "# Choose the UUID representation matching the existing BSON data." 
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.lambda$placesCommentedDiagnosticsInMainYamlFile$9(FindMissingMongoValueRepresentationTest.java:112)
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest$$Lambda/0x00007ffaec9b3420.apply(Unknown Source)
-        at org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:579)
-        at org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.placesCommentedDiagnosticsInMainYamlFile(FindMissingMongoValueRepresentationTest.java:98)
+        application:
+          name: example
+      # Choose the UUID representation matching the existing BSON data.
+      # spring.mongodb.representation.uuid: <representation>
+      # Choose the big-number representation matching the existing BSON data.
+      # spring.data.mongodb.representation.big-decimal: <representation>"
+     but was: 
+      "spring:
+        application:
+          name: example
+      # Choose the UUID representation matching the existing BSON data.
+      # spring.mongodb.representation.uuid: <representation>
+      # Choose the big-number representation matching the existing BSON data.
+      # spring.data.mongodb.representation.big-decimal: <representation>
+      "
+        at app//org.openrewrite.test.RewriteTest.assertContentEquals(RewriteTest.java:702)
+        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:584)
+        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
+        at app//org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.placesCommentedDiagnosticsInMainYamlFile(FindMissingMongoValueRepresentationTest.java:98)
 
 16 tests completed, 1 failed
 
@@ -225,5 +245,5 @@ Caused by: org.gradle.api.internal.exceptions.MarkedVerificationException: There
 	... 30 more
 
 
-BUILD FAILED in 2m 2s
+BUILD FAILED in 2m 10s
 8 actionable tasks: 8 executed
