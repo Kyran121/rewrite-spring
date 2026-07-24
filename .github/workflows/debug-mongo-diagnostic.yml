@@ -1,0 +1,49 @@
+name: Debug Mongo diagnostic
+
+on:
+  push:
+    branches:
+      - detect-mongodb-value-representations
+    paths:
+      - .github/workflows/debug-mongo-diagnostic.yml
+
+permissions:
+  contents: write
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: detect-mongodb-value-representations
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run focused validation
+        shell: bash
+        run: |
+          set +e
+          ./gradlew --console=plain --stacktrace --no-daemon \
+            compileJava compileTestJava \
+            test \
+            --tests org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest \
+            --tests org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationBoundariesTest \
+            --tests org.openrewrite.java.spring.data.UpgradeSpringDataMongoDb_5_0RepresentationTest \
+            recipeCsvGenerate > /tmp/mongo-diagnostic-build.log 2>&1
+          status=$?
+          {
+            echo "exit_status=$status"
+            echo "--- last 400 lines ---"
+            tail -n 400 /tmp/mongo-diagnostic-build.log
+          } > .ci-mongo-diagnostic.log
+          exit 0
+      - name: Commit diagnostic output
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .ci-mongo-diagnostic.log
+          git commit -m "Capture Mongo diagnostic build output"
+          git push
