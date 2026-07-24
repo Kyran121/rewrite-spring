@@ -80,9 +80,9 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/private UUID externalId;
+                    private UUID externalId;
                 }
                 """
             )
