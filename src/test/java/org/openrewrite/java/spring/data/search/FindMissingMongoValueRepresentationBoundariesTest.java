@@ -214,6 +214,7 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                 """,
               spec -> spec
                 .path("src/main/resources/application.yml")
+                .after(actual -> actual)
                 .afterRecipe(file -> {
                     assertYamlEntryMarked(file, "uuid");
                     assertYamlEntryMarked(file, "big-decimal");
