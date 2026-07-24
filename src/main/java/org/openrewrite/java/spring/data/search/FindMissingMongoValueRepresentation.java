@@ -16,8 +16,6 @@
 package org.openrewrite.java.spring.data.search;
 
 import lombok.Getter;
-import lombok.Value;
-import lombok.With;
 import org.jspecify.annotations.Nullable;
 import org.openrewrite.ExecutionContext;
 import org.openrewrite.ScanningRecipe;
@@ -29,31 +27,23 @@ import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.MethodMatcher;
 import org.openrewrite.java.marker.JavaProject;
 import org.openrewrite.java.spring.SpringConfigFile;
-import org.openrewrite.java.spring.table.MongoValueRepresentationFields;
+import org.openrewrite.java.spring.data.table.MongoValueRepresentationFields;
 import org.openrewrite.java.tree.Expression;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaSourceFile;
 import org.openrewrite.java.tree.JavaType;
 import org.openrewrite.java.tree.TypeUtils;
-import org.openrewrite.marker.Marker;
 import org.openrewrite.marker.SearchResult;
 import org.openrewrite.marker.SourceSet;
-import org.openrewrite.properties.PropertiesIsoVisitor;
 import org.openrewrite.properties.search.FindProperties;
 import org.openrewrite.properties.tree.Properties;
-import org.openrewrite.yaml.YamlIsoVisitor;
 import org.openrewrite.yaml.search.FindProperty;
 import org.openrewrite.yaml.tree.Yaml;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Find explicitly MongoDB-mapped UUID and big-number fields for which Spring Data MongoDB 5
@@ -70,13 +60,16 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
 
     private static final String UUID_MESSAGE =
             "Spring Data MongoDB 5 requires an explicit UUID representation; configure `" + UUID_PROPERTY +
-            "` or `MongoClientSettings.Builder.uuidRepresentation(...)`.";
+            "` or `MongoClientSettings.Builder.uuidRepresentation(...)`. Affected fields are listed in the " +
+            "MongoDB value representation fields data table.";
     private static final String BIG_NUMBER_MESSAGE =
             "Spring Data MongoDB 5 requires an explicit BigDecimal/BigInteger representation; configure `" +
-            BIG_NUMBER_PROPERTY + "` or `MongoConverterConfigurationAdapter.bigDecimal(...)`.";
+            BIG_NUMBER_PROPERTY + "` or `MongoConverterConfigurationAdapter.bigDecimal(...)`. Affected fields are " +
+            "listed in the MongoDB value representation fields data table.";
     private static final String UUID_AND_BIG_NUMBER_MESSAGE =
             "Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `" +
-            UUID_PROPERTY + "` and `" + BIG_NUMBER_PROPERTY + "`, or their Java equivalents.";
+            UUID_PROPERTY + "` and `" + BIG_NUMBER_PROPERTY + "`, or their Java equivalents. Affected fields are " +
+            "listed in the MongoDB value representation fields data table.";
 
     private static final MethodMatcher UUID_REPRESENTATION =
             new MethodMatcher("com.mongodb.MongoClientSettings$Builder uuidRepresentation(..)");
@@ -98,16 +91,15 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
     private static final AnnotationMatcher ID =
             new AnnotationMatcher("@org.springframework.data.annotation.Id");
 
-    private final transient MongoValueRepresentationFields affectedFields =
-            new MongoValueRepresentationFields(this);
+    transient MongoValueRepresentationFields affectedFields = new MongoValueRepresentationFields(this);
 
     @Getter
     final String displayName = "Find missing MongoDB value representation configuration";
 
     @Getter
     final String description = "Find explicitly MongoDB-mapped UUID, BigInteger, and BigDecimal fields that require an " +
-            "explicit representation when migrating to Spring Data MongoDB 5. The recipe adds one project-level " +
-            "diagnostic and records every affected field in a data table without choosing a storage representation.";
+            "explicit representation when migrating to Spring Data MongoDB 5. The recipe reports affected fields " +
+            "without choosing a storage representation.";
 
     @Override
     public Accumulator getInitialValue(ExecutionContext ctx) {
@@ -129,17 +121,10 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
                     return source;
                 }
 
-                if (source.getMarkers().findFirst(ProjectDiagnostic.class).isPresent()) {
-                    acc.reportedProjects.add(project);
-                }
-
                 if (source instanceof JavaSourceFile && isMainSource(source)) {
-                    scanJavaConfiguration((JavaSourceFile) source, project, acc, ctx);
-                    scanAffectedFields((JavaSourceFile) source, project, acc, ctx);
+                    scanJavaSource((JavaSourceFile) source, project, acc, ctx);
                 } else if (isMainSpringConfigurationFile(source)) {
                     scanPropertyConfiguration(source, project, acc);
-                    acc.configurationSources.merge(project, source.getSourcePath(),
-                            FindMissingMongoValueRepresentation::preferredConfigurationSource);
                 }
                 return source;
             }
@@ -151,71 +136,96 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
         return new TreeVisitor<Tree, ExecutionContext>() {
             @Override
             public @Nullable Tree visit(@Nullable Tree tree, ExecutionContext ctx) {
-                if (!(tree instanceof SourceFile)) {
+                if (!(tree instanceof JavaSourceFile) || !isMainSource((SourceFile) tree)) {
                     return tree;
                 }
 
                 SourceFile source = (SourceFile) tree;
                 JavaProject project = javaProject(source);
-                if (project == null || acc.reportedProjects.contains(project)) {
+                if (project == null) {
                     return source;
                 }
 
-                List<Occurrence> unresolved = unresolvedOccurrences(project, acc);
-                if (unresolved.isEmpty()) {
+                boolean missingUuid = !acc.uuidConfigured.contains(project) && acc.uuidAnchors.containsKey(project);
+                boolean missingBigNumber = !acc.bigNumberConfigured.contains(project) &&
+                        acc.bigNumberAnchors.containsKey(project);
+                if (!missingUuid && !missingBigNumber) {
                     return source;
                 }
 
-                Path targetSource = acc.configurationSources.get(project);
-                Occurrence targetOccurrence = null;
-                if (targetSource == null) {
-                    targetOccurrence = unresolved.stream()
-                            .min(Comparator.comparing((Occurrence occurrence) -> occurrence.sourcePath.toString())
-                                    .thenComparing(Occurrence::getOwningType)
-                                    .thenComparing(Occurrence::getField)
-                                    .thenComparing(occurrence -> occurrence.kind.name()))
-                            .orElse(null);
-                    if (targetOccurrence == null) {
-                        return source;
+                DiagnosticAnchor diagnosticAnchor = diagnosticAnchor(project, acc, missingUuid, missingBigNumber);
+                String sourcePath = source.getSourcePath().toString();
+
+                return new JavaIsoVisitor<ExecutionContext>() {
+                    @Override
+                    public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDeclaration,
+                                                                    ExecutionContext executionContext) {
+                        J.ClassDeclaration c = super.visitClassDeclaration(classDeclaration, executionContext);
+                        if (diagnosticAnchor != null && diagnosticAnchor.classId.equals(c.getId())) {
+                            return SearchResult.found(c, diagnosticMessage(missingUuid, missingBigNumber));
+                        }
+                        return c;
                     }
-                    targetSource = targetOccurrence.sourcePath;
-                }
 
-                if (!source.getSourcePath().equals(targetSource)) {
-                    return source;
-                }
+                    @Override
+                    public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations,
+                                                                             ExecutionContext executionContext) {
+                        J.VariableDeclarations d = super.visitVariableDeclarations(declarations, executionContext);
+                        J.ClassDeclaration owningClass = getCursor().firstEnclosing(J.ClassDeclaration.class);
+                        if (owningClass == null || getCursor().firstEnclosing(J.MethodDeclaration.class) != null ||
+                                !isExplicitlyMongoMapped(owningClass, d) || isIgnoredField(d)) {
+                            return d;
+                        }
 
-                for (Occurrence occurrence : unresolved) {
-                    affectedFields.insertRow(ctx, new MongoValueRepresentationFields.Row(
-                            occurrence.sourcePath.toString(),
-                            occurrence.owningType,
-                            occurrence.field,
-                            occurrence.kind.displayName,
-                            occurrence.kind.configurationProperty));
-                }
+                        boolean fieldMissingUuid = missingUuid && containsPersistedType(d.getType(), UUID_TYPE);
+                        boolean fieldMissingBigNumber = missingBigNumber &&
+                                (containsPersistedType(d.getType(), BIG_DECIMAL_TYPE) ||
+                                 containsPersistedType(d.getType(), BIG_INTEGER_TYPE)) &&
+                                !hasExplicitFieldTargetType(d) && hasNonIdBigNumber(d);
+                        if (!fieldMissingUuid && !fieldMissingBigNumber) {
+                            return d;
+                        }
 
-                boolean missingUuid = unresolved.stream().anyMatch(occurrence -> occurrence.kind == ValueKind.UUID);
-                boolean missingBigNumber = unresolved.stream().anyMatch(occurrence -> occurrence.kind == ValueKind.BIG_NUMBER);
-                String message = diagnosticMessage(missingUuid, missingBigNumber);
-
-                SourceFile marked;
-                if (source instanceof Properties.File) {
-                    marked = markProperties((Properties.File) source, message, ctx);
-                } else if (source instanceof Yaml.Documents) {
-                    marked = markYaml((Yaml.Documents) source, message, ctx);
-                } else if (source instanceof JavaSourceFile && targetOccurrence != null) {
-                    marked = markJavaDeclaration((JavaSourceFile) source, targetOccurrence.declarationId, message, ctx);
-                } else {
-                    marked = SearchResult.found(source, message);
-                }
-
-                return marked.withMarkers(marked.getMarkers().addIfAbsent(new ProjectDiagnostic(Tree.randomId())));
+                        String declaringType = declaringType(owningClass);
+                        if (fieldMissingUuid) {
+                            for (J.VariableDeclarations.NamedVariable variable : d.getVariables()) {
+                                recordAffectedField(acc, project, executionContext, sourcePath, declaringType,
+                                        variable.getSimpleName(), "UUID");
+                            }
+                        }
+                        if (fieldMissingBigNumber) {
+                            for (J.VariableDeclarations.NamedVariable variable : d.getVariables()) {
+                                if (!TypeUtils.isOfClassType(d.getType(), BIG_INTEGER_TYPE) ||
+                                        !isBigIntegerId(d, variable)) {
+                                    recordAffectedField(acc, project, executionContext, sourcePath, declaringType,
+                                            variable.getSimpleName(), "BigDecimal/BigInteger");
+                                }
+                            }
+                        }
+                        return d;
+                    }
+                }.visitNonNull(source, ctx);
             }
         };
     }
 
-    private static void scanJavaConfiguration(JavaSourceFile source, JavaProject project, Accumulator acc,
-                                              ExecutionContext ctx) {
+    private void recordAffectedField(Accumulator acc, JavaProject project, ExecutionContext ctx, String sourcePath,
+                                     String declaringType, String fieldName, String representation) {
+        String rowKey = System.identityHashCode(project) + "|" + sourcePath + "|" + declaringType + "|" +
+                fieldName + "|" + representation;
+        if (acc.recordedRows.add(rowKey)) {
+            affectedFields.insertRow(ctx, new MongoValueRepresentationFields.Row(
+                    sourcePath,
+                    declaringType,
+                    fieldName,
+                    representation
+            ));
+        }
+    }
+
+    private static void scanJavaSource(JavaSourceFile source, JavaProject project, Accumulator acc,
+                                       ExecutionContext ctx) {
+        String sourcePath = source.getSourcePath().toString();
         new JavaIsoVisitor<ExecutionContext>() {
             @Override
             public J.MethodInvocation visitMethodInvocation(J.MethodInvocation method, ExecutionContext executionContext) {
@@ -228,12 +238,7 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
                 }
                 return m;
             }
-        }.visit(source, ctx);
-    }
 
-    private static void scanAffectedFields(JavaSourceFile source, JavaProject project, Accumulator acc,
-                                           ExecutionContext ctx) {
-        new JavaIsoVisitor<ExecutionContext>() {
             @Override
             public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations,
                                                                      ExecutionContext executionContext) {
@@ -244,74 +249,37 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
                     return d;
                 }
 
-                String owningType = owningClass.getType() == null ? owningClass.getSimpleName() :
-                        owningClass.getType().getFullyQualifiedName();
-                boolean containsUuid = containsPersistedType(d.getType(), UUID_TYPE);
-                boolean containsBigNumber = (containsPersistedType(d.getType(), BIG_DECIMAL_TYPE) ||
-                                             containsPersistedType(d.getType(), BIG_INTEGER_TYPE)) &&
-                                            !hasExplicitFieldTargetType(d);
-
-                if (containsUuid) {
-                    for (J.VariableDeclarations.NamedVariable variable : d.getVariables()) {
-                        acc.addOccurrence(project, new Occurrence(source.getSourcePath(), d.getId(), owningType,
-                                variable.getSimpleName(), ValueKind.UUID));
-                    }
+                DiagnosticAnchor anchor = new DiagnosticAnchor(sourcePath, owningClass.getSimpleName(),
+                        owningClass.getId());
+                if (containsPersistedType(d.getType(), UUID_TYPE)) {
+                    recordAnchor(acc.uuidAnchors, project, anchor);
                 }
-
-                if (containsBigNumber) {
-                    for (J.VariableDeclarations.NamedVariable variable : d.getVariables()) {
-                        if (!TypeUtils.isOfClassType(d.getType(), BIG_INTEGER_TYPE) || !isBigIntegerId(d, variable)) {
-                            acc.addOccurrence(project, new Occurrence(source.getSourcePath(), d.getId(), owningType,
-                                    variable.getSimpleName(), ValueKind.BIG_NUMBER));
-                        }
-                    }
+                if ((containsPersistedType(d.getType(), BIG_DECIMAL_TYPE) ||
+                     containsPersistedType(d.getType(), BIG_INTEGER_TYPE)) &&
+                        !hasExplicitFieldTargetType(d) && hasNonIdBigNumber(d)) {
+                    recordAnchor(acc.bigNumberAnchors, project, anchor);
                 }
                 return d;
             }
         }.visit(source, ctx);
     }
 
-    private static SourceFile markProperties(Properties.File source, String message, ExecutionContext ctx) {
-        boolean[] marked = {false};
-        Properties.File after = (Properties.File) new PropertiesIsoVisitor<ExecutionContext>() {
-            @Override
-            public Properties.Entry visitEntry(Properties.Entry entry, ExecutionContext executionContext) {
-                Properties.Entry e = super.visitEntry(entry, executionContext);
-                if (!marked[0]) {
-                    marked[0] = true;
-                    return SearchResult.found(e, message);
-                }
-                return e;
-            }
-        }.visitNonNull(source, ctx);
-        return marked[0] ? after : SearchResult.found(source, message);
+    private static void recordAnchor(Map<JavaProject, DiagnosticAnchor> anchors, JavaProject project,
+                                     DiagnosticAnchor candidate) {
+        anchors.merge(project, candidate, DiagnosticAnchor::earlier);
     }
 
-    private static SourceFile markYaml(Yaml.Documents source, String message, ExecutionContext ctx) {
-        boolean[] marked = {false};
-        Yaml.Documents after = (Yaml.Documents) new YamlIsoVisitor<ExecutionContext>() {
-            @Override
-            public Yaml.Mapping.Entry visitMappingEntry(Yaml.Mapping.Entry entry, ExecutionContext executionContext) {
-                if (!marked[0]) {
-                    marked[0] = true;
-                    return super.visitMappingEntry(SearchResult.found(entry, message), executionContext);
-                }
-                return super.visitMappingEntry(entry, executionContext);
-            }
-        }.visitNonNull(source, ctx);
-        return marked[0] ? after : SearchResult.found(source, message);
-    }
-
-    private static SourceFile markJavaDeclaration(JavaSourceFile source, UUID declarationId, String message,
-                                                  ExecutionContext ctx) {
-        return (SourceFile) new JavaIsoVisitor<ExecutionContext>() {
-            @Override
-            public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations,
-                                                                     ExecutionContext executionContext) {
-                J.VariableDeclarations d = super.visitVariableDeclarations(declarations, executionContext);
-                return d.getId().equals(declarationId) ? SearchResult.found(d, message) : d;
-            }
-        }.visitNonNull(source, ctx);
+    private static @Nullable DiagnosticAnchor diagnosticAnchor(JavaProject project, Accumulator acc,
+                                                               boolean missingUuid, boolean missingBigNumber) {
+        DiagnosticAnchor uuidAnchor = missingUuid ? acc.uuidAnchors.get(project) : null;
+        DiagnosticAnchor bigNumberAnchor = missingBigNumber ? acc.bigNumberAnchors.get(project) : null;
+        if (uuidAnchor == null) {
+            return bigNumberAnchor;
+        }
+        if (bigNumberAnchor == null) {
+            return uuidAnchor;
+        }
+        return DiagnosticAnchor.earlier(uuidAnchor, bigNumberAnchor);
     }
 
     private static void scanPropertyConfiguration(SourceFile source, JavaProject project, Accumulator acc) {
@@ -382,6 +350,13 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
                 declarations.getLeadingAnnotations().stream().anyMatch(TRANSIENT::matches);
     }
 
+    private static boolean hasNonIdBigNumber(J.VariableDeclarations declarations) {
+        if (!TypeUtils.isOfClassType(declarations.getType(), BIG_INTEGER_TYPE)) {
+            return true;
+        }
+        return declarations.getVariables().stream().anyMatch(variable -> !isBigIntegerId(declarations, variable));
+    }
+
     private static boolean isBigIntegerId(J.VariableDeclarations declarations,
                                           J.VariableDeclarations.NamedVariable variable) {
         return declarations.getLeadingAnnotations().stream().anyMatch(annotation ->
@@ -440,15 +415,9 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
         return false;
     }
 
-    private static List<Occurrence> unresolvedOccurrences(JavaProject project, Accumulator acc) {
-        List<Occurrence> unresolved = new ArrayList<>();
-        for (Occurrence occurrence : acc.occurrences.getOrDefault(project, new ConcurrentLinkedQueue<>())) {
-            if ((occurrence.kind == ValueKind.UUID && !acc.uuidConfigured.contains(project)) ||
-                    (occurrence.kind == ValueKind.BIG_NUMBER && !acc.bigNumberConfigured.contains(project))) {
-                unresolved.add(occurrence);
-            }
-        }
-        return unresolved;
+    private static String declaringType(J.ClassDeclaration owningClass) {
+        JavaType.FullyQualified type = owningClass.getType();
+        return type == null ? owningClass.getSimpleName() : type.getFullyQualifiedName();
     }
 
     private static String diagnosticMessage(boolean missingUuid, boolean missingBigNumber) {
@@ -456,29 +425,6 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
             return UUID_AND_BIG_NUMBER_MESSAGE;
         }
         return missingUuid ? UUID_MESSAGE : BIG_NUMBER_MESSAGE;
-    }
-
-    private static Path preferredConfigurationSource(Path left, Path right) {
-        int leftPriority = configurationSourcePriority(left);
-        int rightPriority = configurationSourcePriority(right);
-        if (leftPriority != rightPriority) {
-            return leftPriority < rightPriority ? left : right;
-        }
-        return left.toString().compareTo(right.toString()) <= 0 ? left : right;
-    }
-
-    private static int configurationSourcePriority(Path path) {
-        String filename = path.getFileName().toString();
-        if ("application.properties".equals(filename)) {
-            return 0;
-        }
-        if ("application.yml".equals(filename)) {
-            return 1;
-        }
-        if ("application.yaml".equals(filename)) {
-            return 2;
-        }
-        return 3;
     }
 
     private static boolean isMainSpringConfigurationFile(SourceFile source) {
@@ -501,43 +447,35 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<FindMiss
         return source.getMarkers().findFirst(JavaProject.class).orElse(null);
     }
 
-    enum ValueKind {
-        UUID("UUID", UUID_PROPERTY),
-        BIG_NUMBER("BigDecimal/BigInteger", BIG_NUMBER_PROPERTY);
-
-        final String displayName;
-        final String configurationProperty;
-
-        ValueKind(String displayName, String configurationProperty) {
-            this.displayName = displayName;
-            this.configurationProperty = configurationProperty;
-        }
-    }
-
-    @Value
-    static class Occurrence {
-        Path sourcePath;
-        UUID declarationId;
-        String owningType;
-        String field;
-        ValueKind kind;
-    }
-
-    @Value
-    @With
-    static class ProjectDiagnostic implements Marker {
-        UUID id;
-    }
-
     static class Accumulator {
         final Set<JavaProject> uuidConfigured = ConcurrentHashMap.newKeySet();
         final Set<JavaProject> bigNumberConfigured = ConcurrentHashMap.newKeySet();
-        final Set<JavaProject> reportedProjects = ConcurrentHashMap.newKeySet();
-        final Map<JavaProject, Path> configurationSources = new ConcurrentHashMap<>();
-        final Map<JavaProject, ConcurrentLinkedQueue<Occurrence>> occurrences = new ConcurrentHashMap<>();
+        final Map<JavaProject, DiagnosticAnchor> uuidAnchors = new ConcurrentHashMap<>();
+        final Map<JavaProject, DiagnosticAnchor> bigNumberAnchors = new ConcurrentHashMap<>();
+        final Set<String> recordedRows = ConcurrentHashMap.newKeySet();
+    }
 
-        void addOccurrence(JavaProject project, Occurrence occurrence) {
-            occurrences.computeIfAbsent(project, ignored -> new ConcurrentLinkedQueue<>()).add(occurrence);
+    static class DiagnosticAnchor {
+        final String sourcePath;
+        final String className;
+        final UUID classId;
+
+        DiagnosticAnchor(String sourcePath, String className, UUID classId) {
+            this.sourcePath = sourcePath;
+            this.className = className;
+            this.classId = classId;
+        }
+
+        static DiagnosticAnchor earlier(DiagnosticAnchor left, DiagnosticAnchor right) {
+            int pathComparison = left.sourcePath.compareTo(right.sourcePath);
+            if (pathComparison != 0) {
+                return pathComparison < 0 ? left : right;
+            }
+            int classComparison = left.className.compareTo(right.className);
+            if (classComparison != 0) {
+                return classComparison < 0 ? left : right;
+            }
+            return left.classId.toString().compareTo(right.classId.toString()) <= 0 ? left : right;
         }
     }
 }
