@@ -202,6 +202,7 @@ class FindMissingMongoValueRepresentationTest extends MongoValueRepresentationTe
                 """,
               spec -> spec
                 .path("src/main/resources/application.properties")
+                .after(actual -> actual)
                 .afterRecipe(file -> {
                     assertPropertyMarked(file, "spring.mongodb.representation.uuid");
                     assertPropertyMarked(file, "spring.data.mongodb.representation.big-decimal");
