@@ -28,8 +28,6 @@ import org.openrewrite.marker.SearchResult;
 import org.openrewrite.properties.AddPropertyComment;
 import org.openrewrite.properties.PropertiesIsoVisitor;
 import org.openrewrite.properties.tree.Properties;
-import org.openrewrite.yaml.CommentOutProperty;
-import org.openrewrite.yaml.MergeYaml;
 import org.openrewrite.yaml.YamlIsoVisitor;
 import org.openrewrite.yaml.tree.Yaml;
 
@@ -79,12 +77,24 @@ final class MongoValueRepresentationDiagnostics {
             return source;
         }
 
-        SourceFile changed = addProperties(source, addUuid, addBigNumber, ctx);
-        if (addUuid) {
-            changed = commentOutProperty(changed, ValueKind.UUID, ctx);
-        }
-        if (addBigNumber) {
-            changed = commentOutProperty(changed, ValueKind.BIG_NUMBER, ctx);
+        SourceFile changed = source;
+        if (changed instanceof Yaml.Documents) {
+            if (addUuid || addBigNumber) {
+                changed = addYamlSuggestions((Yaml.Documents) changed, addUuid, addBigNumber, ctx);
+            }
+        } else {
+            if (addUuid) {
+                changed = addProperty(changed, ValueKind.UUID, ctx);
+            }
+            if (addBigNumber) {
+                changed = addProperty(changed, ValueKind.BIG_NUMBER, ctx);
+            }
+            if (addUuid) {
+                changed = commentPropertiesEntry(changed, ValueKind.UUID, ctx);
+            }
+            if (addBigNumber) {
+                changed = commentPropertiesEntry(changed, ValueKind.BIG_NUMBER, ctx);
+            }
         }
         if (!issues.isEmpty()) {
             changed = markConfigurationIssues(changed, issues, ctx);
@@ -121,33 +131,6 @@ final class MongoValueRepresentationDiagnostics {
         return marked.withMarkers(marked.getMarkers().addIfAbsent(new ProjectDiagnostic(Tree.randomId())));
     }
 
-    private static SourceFile addProperties(SourceFile source, boolean addUuid, boolean addBigNumber,
-                                            ExecutionContext ctx) {
-        if (source instanceof Yaml.Documents) {
-            StringBuilder yaml = new StringBuilder("spring:");
-            if (addUuid) {
-                yaml.append("\n  mongodb:\n    representation:\n      uuid: ")
-                        .append(REPRESENTATION_PLACEHOLDER);
-            }
-            if (addBigNumber) {
-                yaml.append("\n  data:\n    mongodb:\n      representation:\n        big-decimal: ")
-                        .append(REPRESENTATION_PLACEHOLDER);
-            }
-            return (SourceFile) new MergeYaml("$", yaml.toString(), true,
-                    null, null, null, null, null)
-                    .getVisitor().visitNonNull(source, ctx);
-        }
-
-        SourceFile changed = source;
-        if (addUuid) {
-            changed = addProperty(changed, ValueKind.UUID, ctx);
-        }
-        if (addBigNumber) {
-            changed = addProperty(changed, ValueKind.BIG_NUMBER, ctx);
-        }
-        return changed;
-    }
-
     private static SourceFile addProperty(SourceFile source, ValueKind kind, ExecutionContext ctx) {
         String path = source.getSourcePath().toString().replace('\\', '/');
         return (SourceFile) new AddSpringProperty(
@@ -155,15 +138,42 @@ final class MongoValueRepresentationDiagnostics {
                 .getVisitor().visitNonNull(source, ctx);
     }
 
-    private static SourceFile commentOutProperty(SourceFile source, ValueKind kind, ExecutionContext ctx) {
-        if (source instanceof Properties.File) {
-            return (SourceFile) new AddPropertyComment(
-                    kind.configurationProperty, kind.missingPropertyComment, true)
-                    .getVisitor().visitNonNull(source, ctx);
-        }
-        return (SourceFile) new CommentOutProperty(
+    private static SourceFile commentPropertiesEntry(SourceFile source, ValueKind kind, ExecutionContext ctx) {
+        return (SourceFile) new AddPropertyComment(
                 kind.configurationProperty, kind.missingPropertyComment, true)
                 .getVisitor().visitNonNull(source, ctx);
+    }
+
+    private static SourceFile addYamlSuggestions(Yaml.Documents source, boolean addUuid, boolean addBigNumber,
+                                                 ExecutionContext ctx) {
+        StringBuilder suggestions = new StringBuilder();
+        if (addUuid) {
+            appendYamlSuggestion(suggestions, ValueKind.UUID);
+        }
+        if (addBigNumber) {
+            appendYamlSuggestion(suggestions, ValueKind.BIG_NUMBER);
+        }
+        return (SourceFile) new YamlIsoVisitor<ExecutionContext>() {
+            private boolean added;
+
+            @Override
+            public Yaml.Document visitDocument(Yaml.Document document, ExecutionContext p) {
+                Yaml.Document d = super.visitDocument(document, p);
+                if (added) {
+                    return d;
+                }
+                added = true;
+                String existing = d.getEnd().getPrefix();
+                String separator = existing.endsWith("\n") ? "" : "\n";
+                return d.withEnd(d.getEnd().withPrefix(existing + separator + suggestions));
+            }
+        }.visitNonNull(source, ctx);
+    }
+
+    private static void appendYamlSuggestion(StringBuilder suggestions, ValueKind kind) {
+        suggestions.append("# ").append(kind.missingPropertyComment).append('\n')
+                .append("# ").append(kind.configurationProperty).append(": ")
+                .append(REPRESENTATION_PLACEHOLDER).append('\n');
     }
 
     private static SourceFile markConfigurationIssues(SourceFile source, List<ConfigurationIssue> issues,
