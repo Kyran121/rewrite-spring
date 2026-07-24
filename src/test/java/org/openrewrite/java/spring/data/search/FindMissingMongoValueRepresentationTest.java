@@ -18,7 +18,7 @@ package org.openrewrite.java.spring.data.search;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.DocumentExample;
 import org.openrewrite.java.JavaParser;
-import org.openrewrite.java.spring.table.MongoValueRepresentationFields;
+import org.openrewrite.java.spring.data.table.MongoValueRepresentationFields;
 import org.openrewrite.test.RecipeSpec;
 import org.openrewrite.test.RewriteTest;
 
@@ -116,19 +116,18 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
 
     @DocumentExample
     @Test
-    void reportsOncePerProjectAndListsAllAffectedFields() {
+    void reportsOneProjectDiagnosticAndListsAllAffectedFields() {
         rewriteRun(
           spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
             assertThat(rows)
               .extracting(
-                MongoValueRepresentationFields.Row::getOwningType,
-                MongoValueRepresentationFields.Row::getField,
-                MongoValueRepresentationFields.Row::getValueType,
-                MongoValueRepresentationFields.Row::getConfigurationProperty)
+                MongoValueRepresentationFields.Row::getDeclaringType,
+                MongoValueRepresentationFields.Row::getFieldName,
+                MongoValueRepresentationFields.Row::getRepresentation)
               .containsExactlyInAnyOrder(
-                tuple("com.example.Account", "externalId", "UUID", "spring.mongodb.representation.uuid"),
-                tuple("com.example.Account", "balance", "BigDecimal/BigInteger", "spring.data.mongodb.representation.big-decimal"),
-                tuple("com.example.Account", "sequence", "BigDecimal/BigInteger", "spring.data.mongodb.representation.big-decimal"))),
+                tuple("com.example.Account", "externalId", "UUID"),
+                tuple("com.example.Account", "balance", "BigDecimal/BigInteger"),
+                tuple("com.example.Account", "sequence", "BigDecimal/BigInteger"))),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -155,48 +154,13 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents.)~~>*/private UUID externalId;
+                    private UUID externalId;
                     private BigDecimal balance;
                     private BigInteger sequence;
                 }
                 """
-            )
-          )
-        );
-    }
-
-    @Test
-    void placesProjectDiagnosticInMainConfigurationFile() {
-        rewriteRun(
-          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(2)),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
-              """
-                package com.example;
-
-                import java.math.BigDecimal;
-                import java.util.UUID;
-                import org.springframework.data.mongodb.core.mapping.Document;
-
-                @Document
-                class Account {
-                    private UUID externalId;
-                    private BigDecimal balance;
-                }
-                """
-            ),
-            properties(
-              """
-                spring.application.name=example
-                """,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations")
-                  .actual())
             )
           )
         );
@@ -313,9 +277,8 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
     }
 
     @Test
-    void unspecifiedConfigurationDoesNotSuppressDiagnostics() {
+    void unspecifiedConfigurationDoesNotSuppressProjectDiagnostic() {
         rewriteRun(
-          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(2)),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -331,6 +294,19 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                     private UUID externalId;
                     private BigDecimal balance;
                 }
+                """,
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
+                class Account {
+                    private UUID externalId;
+                    private BigDecimal balance;
+                }
                 """
             ),
             properties(
@@ -338,11 +314,7 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 spring.mongodb.representation.uuid=unspecified
                 spring.data.mongodb.representation.big-decimal=UNSPECIFIED
                 """,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations")
-                  .actual())
+              spec -> spec.path("src/main/resources/application.properties")
             )
           )
         );
@@ -424,12 +396,16 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
     }
 
     @Test
-    void reportsNestedValuesButNotMapKeys() {
+    void listsNestedValuesButNotMapKeys() {
         rewriteRun(
           spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
             assertThat(rows)
-              .extracting(MongoValueRepresentationFields.Row::getField)
-              .containsExactlyInAnyOrder("externalIds", "balances")),
+              .extracting(
+                MongoValueRepresentationFields.Row::getFieldName,
+                MongoValueRepresentationFields.Row::getRepresentation)
+              .containsExactlyInAnyOrder(
+                tuple("externalIds", "UUID"),
+                tuple("balances", "BigDecimal/BigInteger"))),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -458,9 +434,9 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents.)~~>*/private List<UUID> externalIds;
+                    private List<UUID> externalIds;
                     private Map<UUID, String> labelsByExternalId;
                     private Map<String, BigDecimal> balances;
                 }
@@ -471,7 +447,7 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
     }
 
     @Test
-    void testJavaConfigurationDoesNotSuppressMainDiagnostics() {
+    void testJavaConfigurationDoesNotSuppressMainDiagnostic() {
         rewriteRun(
           mavenProject("app",
             pomXml(MINIMAL_POM),
@@ -493,9 +469,9 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/private UUID externalId;
+                    private UUID externalId;
                 }
                 """
             ),
@@ -519,7 +495,7 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
     }
 
     @Test
-    void testResourceConfigurationDoesNotSuppressMainDiagnostics() {
+    void testResourceConfigurationDoesNotSuppressMainDiagnostic() {
         rewriteRun(
           mavenProject("app",
             pomXml(MINIMAL_POM),
@@ -544,9 +520,9 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents.)~~>*/private UUID externalId;
+                    private UUID externalId;
                     private BigDecimal balance;
                 }
                 """
@@ -563,9 +539,8 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
     }
 
     @Test
-    void malformedYamlValuesDoNotSuppressDiagnostics() {
+    void malformedYamlValuesDoNotSuppressProjectDiagnostic() {
         rewriteRun(
-          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(2)),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -577,6 +552,19 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import org.springframework.data.mongodb.core.mapping.Document;
 
                 @Document
+                class Account {
+                    private UUID externalId;
+                    private BigDecimal balance;
+                }
+                """,
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                /*~~(Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations; configure `spring.mongodb.representation.uuid` and `spring.data.mongodb.representation.big-decimal`, or their Java equivalents. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
                     private UUID externalId;
                     private BigDecimal balance;
@@ -596,24 +584,21 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                         big-decimal:
                           - decimal128
                 """,
-              spec -> spec
-                .path("src/main/resources/application.yml")
-                .after(actual -> assertThat(actual)
-                  .contains("Spring Data MongoDB 5 requires explicit UUID and BigDecimal/BigInteger representations")
-                  .actual())
+              spec -> spec.path("src/main/resources/application.yml")
             )
           )
         );
     }
 
     @Test
-    void reportsSharedDeclarationWhenOneBigIntegerIsNotAnId() {
+    void sharedDeclarationListsOnlyTheNonIdentifierField() {
         rewriteRun(
           spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
             assertThat(rows)
-              .singleElement()
-              .extracting(MongoValueRepresentationFields.Row::getField)
-              .isEqualTo("sequence")),
+              .extracting(
+                MongoValueRepresentationFields.Row::getFieldName,
+                MongoValueRepresentationFields.Row::getRepresentation)
+              .containsExactly(tuple("sequence", "BigDecimal/BigInteger"))),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -634,9 +619,9 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import java.math.BigInteger;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires an explicit BigDecimal/BigInteger representation; configure `spring.data.mongodb.representation.big-decimal` or `MongoConverterConfigurationAdapter.bigDecimal(...)`. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires an explicit BigDecimal/BigInteger representation; configure `spring.data.mongodb.representation.big-decimal` or `MongoConverterConfigurationAdapter.bigDecimal(...)`.)~~>*/private BigInteger id, sequence;
+                    private BigInteger id, sequence;
                 }
                 """
             )
@@ -668,9 +653,9 @@ class FindMissingMongoValueRepresentationTest implements RewriteTest {
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
-                @Document
+                /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`. Affected fields are listed in the MongoDB value representation fields data table.)~~>*/@Document
                 class Account {
-                    /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/private UUID externalId;
+                    private UUID externalId;
                 }
                 """
             )
