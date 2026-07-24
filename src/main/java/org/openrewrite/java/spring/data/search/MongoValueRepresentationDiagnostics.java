@@ -97,24 +97,24 @@ final class MongoValueRepresentationDiagnostics {
         }
         for (Occurrence occurrence : unresolved) {
             recipe.affectedFields.insertRow(ctx, new MongoValueRepresentationFields.Row(
-                    occurrence.sourcePath.toString(), occurrence.owningType, occurrence.field,
-                    occurrence.kind.displayName, occurrence.kind.configurationProperty));
+                    occurrence.getSourcePath().toString(), occurrence.getOwningType(), occurrence.getField(),
+                    occurrence.getKind().displayName, occurrence.getKind().configurationProperty));
         }
     }
 
     private static SourceFile markJavaFallback(SourceFile source, JavaProject project, List<Occurrence> unresolved,
                                                Accumulator acc, ExecutionContext ctx) {
         Occurrence target = unresolved.stream()
-                .min(Comparator.comparing((Occurrence occurrence) -> occurrence.sourcePath.toString())
+                .min(Comparator.comparing((Occurrence occurrence) -> occurrence.getSourcePath().toString())
                         .thenComparing(Occurrence::getOwningType)
                         .thenComparing(Occurrence::getField)
-                        .thenComparing(occurrence -> occurrence.kind.name()))
+                        .thenComparing(occurrence -> occurrence.getKind().name()))
                 .orElse(null);
-        if (target == null || !source.getSourcePath().equals(target.sourcePath) ||
+        if (target == null || !source.getSourcePath().equals(target.getSourcePath()) ||
                 !(source instanceof JavaSourceFile) || !acc.javaFallbackMarkedProjects.add(project)) {
             return source;
         }
-        SourceFile marked = markJavaClass((JavaSourceFile) source, target.owningClassId,
+        SourceFile marked = markJavaClass((JavaSourceFile) source, target.getOwningClassId(),
                 diagnosticMessage(hasKind(unresolved, ValueKind.UUID), hasKind(unresolved, ValueKind.BIG_NUMBER)), ctx);
         return marked.withMarkers(marked.getMarkers().addIfAbsent(new ProjectDiagnostic(Tree.randomId())));
     }
@@ -133,7 +133,7 @@ final class MongoValueRepresentationDiagnostics {
                                                       ExecutionContext ctx) {
         Map<UUID, ValueKind> kinds = new ConcurrentHashMap<>();
         for (ConfigurationIssue issue : issues) {
-            kinds.put(issue.treeId, issue.kind);
+            kinds.put(issue.getTreeId(), issue.getKind());
         }
         if (source instanceof Properties.File) {
             return (SourceFile) new PropertiesIsoVisitor<ExecutionContext>() {
@@ -169,8 +169,8 @@ final class MongoValueRepresentationDiagnostics {
     private static List<Occurrence> unresolvedOccurrences(JavaProject project, Accumulator acc) {
         List<Occurrence> unresolved = new ArrayList<>();
         for (Occurrence occurrence : acc.occurrences.getOrDefault(project, new ConcurrentLinkedQueue<>())) {
-            if ((occurrence.kind == ValueKind.UUID && !acc.uuidConfigured.contains(project)) ||
-                    (occurrence.kind == ValueKind.BIG_NUMBER && !acc.bigNumberConfigured.contains(project))) {
+            if ((occurrence.getKind() == ValueKind.UUID && !acc.uuidConfigured.contains(project)) ||
+                    (occurrence.getKind() == ValueKind.BIG_NUMBER && !acc.bigNumberConfigured.contains(project))) {
                 unresolved.add(occurrence);
             }
         }
@@ -182,9 +182,9 @@ final class MongoValueRepresentationDiagnostics {
         List<ConfigurationIssue> unresolved = new ArrayList<>();
         for (ConfigurationIssue issue : acc.configurationIssues.getOrDefault(project,
                 new ConcurrentLinkedQueue<>())) {
-            if (issue.sourcePath.equals(sourcePath) &&
-                    ((issue.kind == ValueKind.UUID && !acc.uuidConfigured.contains(project)) ||
-                            (issue.kind == ValueKind.BIG_NUMBER && !acc.bigNumberConfigured.contains(project)))) {
+            if (issue.getSourcePath().equals(sourcePath) &&
+                    ((issue.getKind() == ValueKind.UUID && !acc.uuidConfigured.contains(project)) ||
+                            (issue.getKind() == ValueKind.BIG_NUMBER && !acc.bigNumberConfigured.contains(project)))) {
                 unresolved.add(issue);
             }
         }
@@ -192,6 +192,6 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     private static boolean hasKind(List<Occurrence> occurrences, ValueKind kind) {
-        return occurrences.stream().anyMatch(occurrence -> occurrence.kind == kind);
+        return occurrences.stream().anyMatch(occurrence -> occurrence.getKind() == kind);
     }
 }
