@@ -21,7 +21,6 @@ import org.openrewrite.Tree;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.marker.JavaProject;
 import org.openrewrite.java.spring.AddSpringProperty;
-import org.openrewrite.java.spring.CommentOutSpringPropertyKey;
 import org.openrewrite.java.spring.table.MongoValueRepresentationFields;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaSourceFile;
@@ -124,8 +123,13 @@ final class MongoValueRepresentationDiagnostics {
         SourceFile withProperty = (SourceFile) new AddSpringProperty(
                 kind.configurationProperty, REPRESENTATION_PLACEHOLDER, null, Collections.singletonList(path))
                 .getVisitor().visitNonNull(source, ctx);
-        return (SourceFile) new CommentOutSpringPropertyKey(
-                kind.configurationProperty, kind.missingPropertyComment, null)
+        if (withProperty instanceof Properties.File) {
+            return (SourceFile) new org.openrewrite.properties.AddPropertyComment(
+                    kind.configurationProperty, kind.missingPropertyComment, true)
+                    .getVisitor().visitNonNull(withProperty, ctx);
+        }
+        return (SourceFile) new org.openrewrite.yaml.CommentOutProperty(
+                kind.configurationProperty, kind.missingPropertyComment, true)
                 .getVisitor().visitNonNull(withProperty, ctx);
     }
 
