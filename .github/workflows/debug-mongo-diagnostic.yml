@@ -6,6 +6,8 @@ on:
       - detect-mongodb-value-representations
     paths:
       - .github/workflows/debug-mongo-diagnostic.yml
+      - src/main/java/org/openrewrite/java/spring/data/search/**
+      - src/test/java/org/openrewrite/java/spring/data/search/**
 
 permissions:
   contents: write
@@ -45,5 +47,5 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .ci-mongo-diagnostic.log
-          git commit -m "Capture Mongo diagnostic build output"
+          git diff --cached --quiet || git commit -m "Capture Mongo diagnostic build output"
           git push
