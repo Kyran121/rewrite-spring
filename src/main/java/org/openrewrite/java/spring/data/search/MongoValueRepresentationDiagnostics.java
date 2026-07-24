@@ -29,6 +29,7 @@ import org.openrewrite.properties.AddPropertyComment;
 import org.openrewrite.properties.PropertiesIsoVisitor;
 import org.openrewrite.properties.tree.Properties;
 import org.openrewrite.yaml.CommentOutProperty;
+import org.openrewrite.yaml.MergeYaml;
 import org.openrewrite.yaml.YamlIsoVisitor;
 import org.openrewrite.yaml.tree.Yaml;
 
@@ -78,13 +79,7 @@ final class MongoValueRepresentationDiagnostics {
             return source;
         }
 
-        SourceFile changed = source;
-        if (addUuid) {
-            changed = addProperty(changed, ValueKind.UUID, ctx);
-        }
-        if (addBigNumber) {
-            changed = addProperty(changed, ValueKind.BIG_NUMBER, ctx);
-        }
+        SourceFile changed = addProperties(source, addUuid, addBigNumber, ctx);
         if (addUuid) {
             changed = commentOutProperty(changed, ValueKind.UUID, ctx);
         }
@@ -124,6 +119,33 @@ final class MongoValueRepresentationDiagnostics {
         SourceFile marked = markJavaClass((JavaSourceFile) source, target.getOwningClassId(),
                 diagnosticMessage(hasKind(unresolved, ValueKind.UUID), hasKind(unresolved, ValueKind.BIG_NUMBER)), ctx);
         return marked.withMarkers(marked.getMarkers().addIfAbsent(new ProjectDiagnostic(Tree.randomId())));
+    }
+
+    private static SourceFile addProperties(SourceFile source, boolean addUuid, boolean addBigNumber,
+                                            ExecutionContext ctx) {
+        if (source instanceof Yaml.Documents) {
+            StringBuilder yaml = new StringBuilder("spring:");
+            if (addUuid) {
+                yaml.append("\n  mongodb:\n    representation:\n      uuid: ")
+                        .append(REPRESENTATION_PLACEHOLDER);
+            }
+            if (addBigNumber) {
+                yaml.append("\n  data:\n    mongodb:\n      representation:\n        big-decimal: ")
+                        .append(REPRESENTATION_PLACEHOLDER);
+            }
+            return (SourceFile) new MergeYaml("$", yaml.toString(), true,
+                    null, null, null, null, null)
+                    .getVisitor().visitNonNull(source, ctx);
+        }
+
+        SourceFile changed = source;
+        if (addUuid) {
+            changed = addProperty(changed, ValueKind.UUID, ctx);
+        }
+        if (addBigNumber) {
+            changed = addProperty(changed, ValueKind.BIG_NUMBER, ctx);
+        }
+        return changed;
     }
 
     private static SourceFile addProperty(SourceFile source, ValueKind kind, ExecutionContext ctx) {
