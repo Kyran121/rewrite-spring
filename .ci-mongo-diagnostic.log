@@ -48,85 +48,7 @@ Note: Recompile with -Xlint:unchecked for details.
 > Task :jar
 > Task :processTestResources
 > Task :testClasses
-
 > Task :test
-
-FindMissingMongoValueRepresentationBoundariesTest > malformedYamlValuesMarkExistingEntries() FAILED
-    org.opentest4j.AssertionFailedError: [Expected recipe to complete in 0 cycles, but took at least one more cycle. Between the last two executed cycles there were changes to "app/src/main/resources/application.yml"] 
-    expected: 
-      "spring:
-        mongodb:
-          representation:
-            uuid:
-              unsupported: value
-        data:
-          mongodb:
-            representation:
-              big-decimal:
-                - decimal128"
-     but was: 
-      "spring:
-        mongodb:
-          representation:
-            ~~(`spring.mongodb.representation.uuid` is blank, malformed, or `UNSPECIFIED`; choose a concrete UUID representation that matches the existing BSON data.)~~>uuid:
-              unsupported: value
-        data:
-          mongodb:
-            representation:
-              ~~(`spring.data.mongodb.representation.big-decimal` is blank, malformed, or `UNSPECIFIED`; choose a concrete big-number representation that matches the existing BSON data.)~~>big-decimal:
-                - decimal128"
-        at app//org.openrewrite.test.LargeSourceSetCheckingExpectedCycles.afterCycle(LargeSourceSetCheckingExpectedCycles.java:112)
-        at app//org.openrewrite.RecipeScheduler.runRecipeCycles(RecipeScheduler.java:119)
-        at app//org.openrewrite.RecipeScheduler.scheduleRun(RecipeScheduler.java:63)
-        at app//org.openrewrite.Recipe.run(Recipe.java:516)
-        at app//org.openrewrite.test.RewriteRunner.run(RewriteRunner.java:51)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:453)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
-        at app//org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationBoundariesTest.malformedYamlValuesMarkExistingEntries(FindMissingMongoValueRepresentationBoundariesTest.java:197)
-
-UpgradeSpringDataMongoDb_5_0RepresentationTest > runsRepresentationDiagnosticThroughComposite() FAILED
-    org.opentest4j.AssertionFailedError: [Unexpected result in "app/com/example/Account.java":
-    diff --git a/app/com/example/Account.java b/app/com/example/Account.java
-    index e5aa094..06d521f 100644
-    --- a/app/com/example/Account.java
-    +++ b/app/com/example/Account.java
-    @@ -3,7 +3,7 @@ 
-     import java.util.UUID;
-     import org.springframework.data.mongodb.core.mapping.Document;
- 
-    -@Document
-    +/*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/@Document
-     class Account {
-    -    /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/private UUID externalId;
-    +    private UUID externalId;
-     }
-    \ No newline at end of file
-    ] 
-    expected: 
-      "package com.example;
-  
-      import java.util.UUID;
-      import org.springframework.data.mongodb.core.mapping.Document;
-  
-      @Document
-      class Account {
-          /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/private UUID externalId;
-      }"
-     but was: 
-      "package com.example;
-  
-      import java.util.UUID;
-      import org.springframework.data.mongodb.core.mapping.Document;
-  
-      /*~~(Spring Data MongoDB 5 requires an explicit UUID representation; configure `spring.mongodb.representation.uuid` or `MongoClientSettings.Builder.uuidRepresentation(...)`.)~~>*/@Document
-      class Account {
-          private UUID externalId;
-      }"
-        at app//org.openrewrite.test.RewriteTest.assertContentEquals(RewriteTest.java:702)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:584)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:154)
-        at app//org.openrewrite.java.spring.data.UpgradeSpringDataMongoDb_5_0RepresentationTest.runsRepresentationDiagnosticThroughComposite(UpgradeSpringDataMongoDb_5_0RepresentationTest.java:43)
 
 FindMissingMongoValueRepresentationTest > placesCommentedDiagnosticsInMainYamlFile() FAILED
     java.lang.AssertionError: 
@@ -134,53 +56,17 @@ FindMissingMongoValueRepresentationTest > placesCommentedDiagnosticsInMainYamlFi
       "spring:
       application:
         name: example
-      mongodb:
-        representation:
-          uuid: <representation>
-      data:
-        mongodb:
-          representation:
-            big-decimal: <representation>"
+            # Choose the big-number representation matching the existing BSON data.
+            # big-decimal: <representation>"
     to contain:
       "# Choose the UUID representation matching the existing BSON data." 
         at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.lambda$placesCommentedDiagnosticsInMainYamlFile$9(FindMissingMongoValueRepresentationTest.java:112)
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest$$Lambda/0x00007f34dc95efc8.apply(Unknown Source)
+        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest$$Lambda/0x00007fa65098f3f8.apply(Unknown Source)
         at org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:579)
         at org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
         at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.placesCommentedDiagnosticsInMainYamlFile(FindMissingMongoValueRepresentationTest.java:98)
 
-FindMissingMongoValueRepresentationTest > unspecifiedConfigurationMarksExistingProperties() FAILED
-    org.opentest4j.AssertionFailedError: [Expected recipe to complete in 0 cycles, but took at least one more cycle. Between the last two executed cycles there were changes to "app/src/main/resources/application.properties"] 
-    expected: 
-      "spring.mongodb.representation.uuid=unspecified
-      spring.data.mongodb.representation.big-decimal=UNSPECIFIED"
-     but was: 
-      "~~(`spring.mongodb.representation.uuid` is blank, malformed, or `UNSPECIFIED`; choose a concrete UUID representation that matches the existing BSON data.)~~>spring.mongodb.representation.uuid=unspecified
-      ~~(`spring.data.mongodb.representation.big-decimal` is blank, malformed, or `UNSPECIFIED`; choose a concrete big-number representation that matches the existing BSON data.)~~>spring.data.mongodb.representation.big-decimal=UNSPECIFIED"
-        at app//org.openrewrite.test.LargeSourceSetCheckingExpectedCycles.afterCycle(LargeSourceSetCheckingExpectedCycles.java:112)
-        at app//org.openrewrite.RecipeScheduler.runRecipeCycles(RecipeScheduler.java:119)
-        at app//org.openrewrite.RecipeScheduler.scheduleRun(RecipeScheduler.java:63)
-        at app//org.openrewrite.Recipe.run(Recipe.java:516)
-        at app//org.openrewrite.test.RewriteRunner.run(RewriteRunner.java:51)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:453)
-        at app//org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
-        at app//org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.unspecifiedConfigurationMarksExistingProperties(FindMissingMongoValueRepresentationTest.java:193)
-
-FindMissingMongoValueRepresentationTest > placesCommentedDiagnosticsInMainPropertiesFile() FAILED
-    java.lang.AssertionError: 
-    Expecting actual:
-      "spring.application.name=example
-    spring.data.mongodb.representation.big-decimal=<representation>
-    spring.mongodb.representation.uuid=<representation>"
-    to contain:
-      "# Choose the UUID representation matching the existing BSON data." 
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.lambda$placesCommentedDiagnosticsInMainPropertiesFile$5(FindMissingMongoValueRepresentationTest.java:85)
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest$$Lambda/0x00007f34dc9dd300.apply(Unknown Source)
-        at org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:579)
-        at org.openrewrite.test.RewriteTest.rewriteRun(RewriteTest.java:159)
-        at org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentationTest.placesCommentedDiagnosticsInMainPropertiesFile(FindMissingMongoValueRepresentationTest.java:73)
-
-16 tests completed, 5 failed
+16 tests completed, 1 failed
 
 > Task :test FAILED
 
@@ -369,5 +255,5 @@ Caused by: org.gradle.api.internal.exceptions.MarkedVerificationException: There
 	... 61 more
 
 
-BUILD FAILED in 2m 3s
+BUILD FAILED in 2m 8s
 8 actionable tasks: 8 executed
