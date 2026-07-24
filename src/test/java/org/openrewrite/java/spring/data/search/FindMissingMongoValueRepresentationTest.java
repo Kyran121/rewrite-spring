@@ -200,9 +200,12 @@ class FindMissingMongoValueRepresentationTest extends MongoValueRepresentationTe
                 spring.mongodb.representation.uuid=unspecified
                 spring.data.mongodb.representation.big-decimal=UNSPECIFIED
                 """,
+              """
+                ~~(`spring.mongodb.representation.uuid` is blank, malformed, or `UNSPECIFIED`; choose a concrete UUID representation that matches the existing BSON data.)~~>spring.mongodb.representation.uuid=unspecified
+                ~~(`spring.data.mongodb.representation.big-decimal` is blank, malformed, or `UNSPECIFIED`; choose a concrete big-number representation that matches the existing BSON data.)~~>spring.data.mongodb.representation.big-decimal=UNSPECIFIED
+                """,
               spec -> spec
                 .path("src/main/resources/application.properties")
-                .after(actual -> actual)
                 .afterRecipe(file -> {
                     assertPropertyMarked(file, "spring.mongodb.representation.uuid");
                     assertPropertyMarked(file, "spring.data.mongodb.representation.big-decimal");

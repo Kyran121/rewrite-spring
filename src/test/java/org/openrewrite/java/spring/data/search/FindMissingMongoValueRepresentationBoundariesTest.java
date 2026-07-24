@@ -212,9 +212,20 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                         big-decimal:
                           - decimal128
                 """,
+              """
+                spring:
+                  mongodb:
+                    representation:
+                      ~~(`spring.mongodb.representation.uuid` is blank, malformed, or `UNSPECIFIED`; choose a concrete UUID representation that matches the existing BSON data.)~~>uuid:
+                        unsupported: value
+                  data:
+                    mongodb:
+                      representation:
+                        ~~(`spring.data.mongodb.representation.big-decimal` is blank, malformed, or `UNSPECIFIED`; choose a concrete big-number representation that matches the existing BSON data.)~~>big-decimal:
+                          - decimal128
+                """,
               spec -> spec
                 .path("src/main/resources/application.yml")
-                .after(actual -> actual)
                 .afterRecipe(file -> {
                     assertYamlEntryMarked(file, "uuid");
                     assertYamlEntryMarked(file, "big-decimal");
