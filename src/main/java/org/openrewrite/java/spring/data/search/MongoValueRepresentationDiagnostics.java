@@ -164,16 +164,21 @@ final class MongoValueRepresentationDiagnostics {
                 }
                 added = true;
                 String existing = d.getEnd().getPrefix();
-                String separator = existing.endsWith("\n") ? "" : "\n";
-                return d.withEnd(d.getEnd().withPrefix(existing + separator + suggestions));
+                boolean hadTrailingNewline = existing.endsWith("\n");
+                String separator = hadTrailingNewline ? "" : "\n";
+                String suffix = hadTrailingNewline ? "\n" : "";
+                return d.withEnd(d.getEnd().withPrefix(existing + separator + suggestions + suffix));
             }
         }.visitNonNull(source, ctx);
     }
 
     private static void appendYamlSuggestion(StringBuilder suggestions, ValueKind kind) {
+        if (suggestions.length() > 0) {
+            suggestions.append('\n');
+        }
         suggestions.append("# ").append(kind.missingPropertyComment).append('\n')
                 .append("# ").append(kind.configurationProperty).append(": ")
-                .append(REPRESENTATION_PLACEHOLDER).append('\n');
+                .append(REPRESENTATION_PLACEHOLDER);
     }
 
     private static SourceFile markConfigurationIssues(SourceFile source, List<ConfigurationIssue> issues,
