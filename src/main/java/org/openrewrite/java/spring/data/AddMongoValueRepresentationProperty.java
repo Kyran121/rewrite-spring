@@ -20,6 +20,7 @@ import lombok.Value;
 import org.jspecify.annotations.Nullable;
 import org.openrewrite.Cursor;
 import org.openrewrite.ExecutionContext;
+import org.openrewrite.Preconditions;
 import org.openrewrite.ScanningRecipe;
 import org.openrewrite.SourceFile;
 import org.openrewrite.Tree;
@@ -82,7 +83,8 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
 
     @Override
     public TreeVisitor<?, ExecutionContext> getVisitor(MongoValueRepresentationAccumulator acc) {
-        JavaIsoVisitor<ExecutionContext> javaVisitor = javaConfigurationVisitor(acc);
+        TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(
+                MongoValueRepresentationScanner.javaConfigurationPrecondition(), javaConfigurationVisitor(acc));
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesConfigurationVisitor(acc);
         YamlIsoVisitor<ExecutionContext> yamlVisitor = yamlConfigurationVisitor(acc);
         return new TreeVisitor<Tree, ExecutionContext>() {

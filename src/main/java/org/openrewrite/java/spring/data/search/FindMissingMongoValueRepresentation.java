@@ -17,6 +17,7 @@ package org.openrewrite.java.spring.data.search;
 
 import lombok.Getter;
 import org.openrewrite.ExecutionContext;
+import org.openrewrite.Preconditions;
 import org.openrewrite.ScanningRecipe;
 import org.openrewrite.TreeVisitor;
 import org.openrewrite.java.JavaIsoVisitor;
@@ -62,7 +63,7 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<MongoVal
 
     @Override
     public TreeVisitor<?, ExecutionContext> getVisitor(MongoValueRepresentationAccumulator acc) {
-        return new JavaIsoVisitor<ExecutionContext>() {
+        return Preconditions.check(MongoValueRepresentationScanner.javaPrecondition(), new JavaIsoVisitor<ExecutionContext>() {
             @Override
             public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext ctx) {
                 JavaProject project = SpringConfigFileSupport.javaProject(cu);
@@ -90,7 +91,7 @@ public class FindMissingMongoValueRepresentation extends ScanningRecipe<MongoVal
                 }
                 return visitedDeclarations;
             }
-        };
+        });
     }
 
     private static boolean isUnresolvedOccurrence(List<Occurrence> unresolved, UUID owningClassId, String field) {

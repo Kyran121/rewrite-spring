@@ -18,12 +18,15 @@ package org.openrewrite.java.spring.data;
 import org.jspecify.annotations.Nullable;
 import org.openrewrite.Cursor;
 import org.openrewrite.ExecutionContext;
+import org.openrewrite.Preconditions;
 import org.openrewrite.Tree;
 import org.openrewrite.TreeVisitor;
 import org.openrewrite.java.AnnotationMatcher;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.MethodMatcher;
 import org.openrewrite.java.marker.JavaProject;
+import org.openrewrite.java.search.UsesMethod;
+import org.openrewrite.java.search.UsesType;
 import org.openrewrite.java.spring.data.MongoValueRepresentationAccumulator.ConfigurationIssue;
 import org.openrewrite.java.spring.data.MongoValueRepresentationAccumulator.Occurrence;
 import org.openrewrite.java.tree.Expression;
@@ -76,13 +79,39 @@ public final class MongoValueRepresentationScanner {
     }
 
     /**
+     * A compilation unit worth visiting: it persists a UUID/BigDecimal/BigInteger field, or
+     * configures one via a client-settings/converter call — either can appear with no trace of the
+     * other, so neither alone would be a safe precondition on its own. Shared by both recipes'
+     * Java-side visitors.
+     */
+    public static TreeVisitor<?, ExecutionContext> javaPrecondition() {
+        return Preconditions.or(
+                new UsesType<>(UUID_TYPE, false),
+                new UsesType<>(BIG_DECIMAL_TYPE, false),
+                new UsesType<>(BIG_INTEGER_TYPE, false),
+                new UsesMethod<>(UUID_REPRESENTATION),
+                new UsesMethod<>(BIG_NUMBER_REPRESENTATION));
+    }
+
+    /**
+     * Narrower than {@link #javaPrecondition()}: for a visitor that only inspects method
+     * invocations (never persisted fields), a client-settings/converter call is the only signal
+     * that matters.
+     */
+    public static TreeVisitor<?, ExecutionContext> javaConfigurationPrecondition() {
+        return Preconditions.or(
+                new UsesMethod<>(UUID_REPRESENTATION),
+                new UsesMethod<>(BIG_NUMBER_REPRESENTATION));
+    }
+
+    /**
      * A single scanner covering all three source kinds a project's configuration can live in: Java
      * (client settings/converter calls, and the persisted fields themselves), properties, and YAML.
      * A source file is exactly one of these, so this one dispatch is the only type check needed —
      * each delegate below is a single, self-contained visitor rather than several chained together.
      */
     public static TreeVisitor<?, ExecutionContext> scanner(MongoValueRepresentationAccumulator acc) {
-        JavaIsoVisitor<ExecutionContext> javaVisitor = javaScanner(acc);
+        TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(javaPrecondition(), javaScanner(acc));
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesScanner(acc);
         YamlIsoVisitor<ExecutionContext> yamlVisitor = yamlScanner(acc);
         return new TreeVisitor<Tree, ExecutionContext>() {
