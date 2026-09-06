@@ -95,9 +95,9 @@ final class MongoValueRepresentationScanner {
     }
 
     /**
-     * A matching call always counts as an attempt, whether its argument is valid — a faulty
-     * call (e.g. {@code uuidRepresentation(null)}) still means the project picked Java configuration
-     * for this kind, so it should be marked in place rather than suggested via a properties file.
+     * A matching call always counts as an attempt: even a faulty one (e.g. {@code uuidRepresentation(null)})
+     * means the project picked Java configuration for this kind, to be marked in place rather than
+     * suggested via a properties file.
      */
     private static void recordJavaConfigurationAttempt(ValueKind kind, J.MethodInvocation method,
                                                         JavaSourceFile source, JavaProject project, Accumulator acc) {

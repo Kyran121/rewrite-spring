@@ -569,12 +569,8 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
 
     @Test
     void doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestion() {
-        // Simulates the steady state after a prior cycle already created and commented the suggested
-        // property (an active, real UNSPECIFIED value — see
-        // MongoValueRepresentationDiagnostics.addUnspecifiedPropertySuggestion's javadoc). Scanning
-        // must recognize it as an existing attempt (not
-        // "unattempted"), otherwise propertiesToAdd would re-include the kind and produce a second,
-        // duplicate suggestion on top of the first.
+        // Steady state after a prior cycle created and commented the UNSPECIFIED suggestion: scanning
+        // must count it as an existing attempt, else propertiesToAdd would emit a duplicate.
         rewriteRun(
           spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
           mavenProject("app",
@@ -606,10 +602,7 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
 
     @Test
     void doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestionInYaml() {
-        // YAML equivalent of doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestion: the
-        // suggestion is a real tree node (see mergeYamlSuggestion), so a prior run's suggestion is
-        // visible to FindProperty like any other entry — scanYamlProperty must recognize its
-        // UNSPECIFIED value as an ordinary invalid configuration rather than re-suggesting it.
+        // YAML equivalent of doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestion.
         rewriteRun(
           spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
           mavenProject("app",
@@ -646,13 +639,9 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
 
     @Test
     void doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage() {
-        // Simulates a separate, later recipe invocation over a file a prior run already annotated:
-        // the still-invalid entry is visible to the scanner every time (unlike the missing-property
-        // placeholder, it never becomes a Properties.Comment), so this exercises Comments.of(...)'s
-        // own documented idempotency rather than any guard of ours. No SearchResult is applied to
-        // the entry itself (see MongoValueRepresentationDiagnostics), so re-running leaves the file
-        // byte-for-byte unchanged; PropertiesCommentService still returns a structurally-new (but
-        // textually identical) tree on the re-add, so one cycle is still needed to reach that state.
+        // A later invocation over an already-annotated file: the still-invalid entry stays visible
+        // to the scanner every cycle, so re-commenting relies on Comments.of(...)'s own idempotency
+        // to leave the file byte-for-byte unchanged.
         rewriteRun(
           spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
           mavenProject("app",
@@ -672,9 +661,7 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
 
     @Test
     void doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessageInYaml() {
-        // YAML equivalent of doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage, confirming
-        // Comments.of(...)'s idempotency also holds for the YAML CommentService implementation
-        // (same structurally-new-but-textually-identical-tree behavior noted there).
+        // YAML equivalent of doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage.
         rewriteRun(
           spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
           mavenProject("app",
@@ -700,8 +687,7 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
 
     @Test
     void doesNotDuplicateAnAlreadyCommentedInvalidJavaConfigurationMessage() {
-        // Java equivalent of doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage, confirming
-        // Comments.of(...)'s idempotency also holds for the Java CommentService implementation.
+        // Java equivalent of doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage.
         rewriteRun(
           mavenProject("app",
             pomXml(MINIMAL_POM),

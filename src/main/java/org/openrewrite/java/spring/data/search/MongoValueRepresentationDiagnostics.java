@@ -76,9 +76,8 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     /**
-     * Marks any faulty Java configuration calls (e.g. {@code uuidRepresentation(null)}) in place,
-     * rather than leaving them to be silently shadowed by a properties-file suggestion for the same
-     * kind.
+     * Marks faulty Java configuration calls in place, rather than shadowing them with a
+     * properties-file suggestion for the same kind.
      */
     private static SourceFile applyToJavaConfiguration(JavaSourceFile source, JavaProject project,
                                                         ProjectDiagnosis diagnosis, Accumulator acc,
@@ -98,10 +97,9 @@ final class MongoValueRepresentationDiagnostics {
         for (ConfigurationIssue issue : issues) {
             kinds.put(issue.getTreeId(), issue.getKind());
         }
-        // The flagged invocation itself is left untouched, since wrapping it in a SearchResult
-        // marker would print as literal text ahead of the real statement in a production run,
-        // corrupting it (SearchResult is only kept separate from real output inside the RewriteTest
-        // harness); Comments.of(...) is idempotent, so no separate already-commented guard is needed.
+        // Leave the flagged invocation untouched: a SearchResult marker would print as literal text
+        // corrupting production output (it's only held separate inside the RewriteTest harness).
+        // Comments.of(...) is idempotent, so no already-commented guard is needed.
         return (SourceFile) new JavaIsoVisitor<ExecutionContext>() {
             @Override
             public J.MethodInvocation visitMethodInvocation(J.MethodInvocation method, ExecutionContext p) {
@@ -114,9 +112,8 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     /**
-     * Whether some kind still needs a baseline configuration file: unresolved, with no config file
-     * for this project yet, and never attempted in Java either (a faulty Java attempt is handled by
-     * {@link #applyToJavaConfiguration} instead of a competing properties-file suggestion).
+     * Whether some kind still needs a baseline file: unresolved, no config file yet, and never
+     * attempted in Java (a faulty Java attempt is handled by {@link #applyToJavaConfiguration}).
      */
     private static boolean needsBaselineFile(ProjectDiagnosis diagnosis, JavaProject project, Accumulator acc) {
         if (diagnosis.preferredConfiguration != null) {
@@ -131,9 +128,9 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     /**
-     * A baseline {@code application.properties} for a project that has affected fields but no
-     * Spring configuration file, so every affected field gets the same suggested-property
-     * treatment on a later cycle instead of an arbitrary class being singled out.
+     * Generates a baseline {@code application.properties} for a project with affected fields but no
+     * Spring configuration file, so every field gets the same suggested-property treatment (on a
+     * later cycle) instead of an arbitrary class being singled out.
      */
     static @Nullable SourceFile generateBaselineConfiguration(JavaProject project, Accumulator acc,
                                                                ExecutionContext ctx) {
@@ -187,9 +184,8 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     /**
-     * What, if anything, this project needs done: which occurrences still need a configured
-     * representation, and where (if anywhere) a new configuration should be suggested. Independent
-     * of which source file is currently being visited.
+     * What this project needs done: which occurrences are unresolved and where a suggestion should
+     * go, independent of the source file being visited.
      */
     private static @Nullable ProjectDiagnosis diagnose(JavaProject project, Accumulator acc) {
         List<Occurrence> occurrences = projectOccurrences(project, acc);
@@ -225,9 +221,9 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     /**
-     * Attaches the "fully handled" marker unless {@code stillPending} — a baseline configuration
-     * file may still be needed for some other kind, and that generate-then-populate sequence takes
-     * multiple cycles; finalizing here first would permanently stop it from ever completing.
+     * Attaches the "fully handled" marker unless {@code stillPending}: a baseline file may still be
+     * needed for another kind, and finalizing before that multi-cycle sequence completes would
+     * permanently stall it.
      */
     private static SourceFile finalizeUnless(SourceFile changed, boolean stillPending) {
         return stillPending ? changed :
@@ -288,9 +284,8 @@ final class MongoValueRepresentationDiagnostics {
         if (invalidKinds.isEmpty()) {
             return unresolved;
         }
-        // A kind can be configured overall (a valid value exists somewhere) yet still have a
-        // separate invalid entry elsewhere, e.g., a bad profile override alongside a valid default.
-        // Such occurrences aren't in `unresolved`, so invalidKinds is what surfaces them here.
+        // A kind can be configured overall yet still have a separate invalid entry (e.g. a bad
+        // profile override beside a valid default); such occurrences aren't in `unresolved`.
         Set<Occurrence> unresolvedLookup = new HashSet<>(unresolved);
         List<Occurrence> actionable = new ArrayList<>();
         for (Occurrence occurrence : occurrences) {
@@ -327,11 +322,8 @@ final class MongoValueRepresentationDiagnostics {
     }
 
     /**
-     * {@link FindMissingMongoValueRepresentation#UNSPECIFIED_VALUE}: a real, validly bindable value
-     * rather than placeholder text, so a project that never gets its suggestion followed up on still
-     * starts up correctly — it's simply as unconfigured as it was before the recipe ran. Uses the
-     * same message an existing invalid value would get from {@link #markConfigurationIssues}, since
-     * that's exactly what this value is once written.
+     * Suggests the property carrying {@link FindMissingMongoValueRepresentation#UNSPECIFIED_VALUE},
+     * with the same message an existing invalid value would get from {@link #markConfigurationIssues}.
      */
     private static SourceFile addUnspecifiedPropertySuggestion(SourceFile source, ValueKind kind, ExecutionContext ctx) {
         String path = source.getSourcePath().toString().replace('\\', '/');
@@ -362,10 +354,9 @@ final class MongoValueRepresentationDiagnostics {
             return (SourceFile) new PropertiesIsoVisitor<ExecutionContext>() {
                 @Override
                 public Properties.File visitFile(Properties.File file, ExecutionContext p) {
-                    // Comments are sibling content in a Properties.File (not entry-prefix metadata),
-                    // so — mirroring org.openrewrite.properties.AddPropertyComment — each match is
-                    // commented directly, leaving the flagged entry itself untouched (see
-                    // markJavaConfigurationIssues for why that matters).
+                    // Comments are sibling content in a Properties.File, not entry-prefix metadata,
+                    // so — like org.openrewrite.properties.AddPropertyComment — comment each match
+                    // directly, leaving the entry untouched (see markJavaConfigurationIssues).
                     Properties.File withComments = file;
                     for (Properties.Content content : file.getContent()) {
                         ValueKind kind = kinds.get(content.getId());
