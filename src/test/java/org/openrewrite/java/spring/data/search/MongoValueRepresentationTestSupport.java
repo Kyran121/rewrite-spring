@@ -16,21 +16,16 @@
 package org.openrewrite.java.spring.data.search;
 
 import org.openrewrite.java.JavaParser;
-import org.openrewrite.properties.PropertiesIsoVisitor;
-import org.openrewrite.properties.tree.Properties;
 import org.openrewrite.test.RecipeSpec;
 import org.openrewrite.test.RewriteTest;
-import org.openrewrite.trait.Comments;
-import org.openrewrite.yaml.YamlIsoVisitor;
-import org.openrewrite.yaml.tree.Yaml;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+/**
+ * Shared test fixtures for the MongoDB value-representation recipes. Does not select a recipe:
+ * each concrete test class picks the recipe(s) it exercises.
+ */
+public abstract class MongoValueRepresentationTestSupport implements RewriteTest {
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-abstract class MongoValueRepresentationTestSupport implements RewriteTest {
-
-    protected static final String MINIMAL_POM =
+    public static final String MINIMAL_POM =
             """
               <project>
                   <modelVersion>4.0.0</modelVersion>
@@ -42,77 +37,82 @@ abstract class MongoValueRepresentationTestSupport implements RewriteTest {
 
     @Override
     public void defaults(RecipeSpec spec) {
-        spec.recipe(new FindMissingMongoValueRepresentation())
-          .parser(JavaParser.fromJavaVersion().dependsOn(
+        spec.parser(JavaParser.fromJavaVersion().dependsOn(
+          """
+            package org.springframework.data.mongodb.core.mapping;
+            public @interface Document {}
+            """,
+          """
+            package org.springframework.data.annotation;
+            public @interface Persistent {}
+            """,
+          """
+            package org.springframework.data.mongodb.core.mapping;
+            public enum FieldType { IMPLICIT, STRING, DECIMAL128, OBJECT_ID }
+            """,
+          """
+            package org.springframework.data.mongodb.core.mapping;
+            public @interface Field {
+                FieldType targetType() default FieldType.IMPLICIT;
+            }
+            """,
+          """
+            package org.springframework.data.mongodb.core.mapping;
+            public @interface MongoId {
+                FieldType value() default FieldType.IMPLICIT;
+            }
+            """,
+          """
+            package org.springframework.data.mongodb.core.mapping;
+            public @interface DBRef {}
+            """,
+          """
+            package org.springframework.data.mongodb.core.mapping;
+            public @interface DocumentReference {}
+            """,
+          """
+            package org.springframework.data.annotation;
+            public @interface Transient {}
+            """,
+          """
+            package org.springframework.data.annotation;
+            public @interface Id {}
+            """,
+          """
+            package org.bson;
+            public enum UuidRepresentation { UNSPECIFIED, STANDARD, JAVA_LEGACY }
+            """,
+          """
+            package org.springframework.context.annotation;
+            public @interface Profile {
+                String[] value();
+            }
+            """,
+          """
+            package com.mongodb;
+            public final class MongoClientSettings {
+                public static final class Builder {
+                    public Builder uuidRepresentation(org.bson.UuidRepresentation representation) {
+                        return this;
+                    }
+                }
+            }
+            """,
+          """
+            package org.springframework.data.mongodb.core.convert;
+            public class MongoCustomConversions {
+                public enum BigDecimalRepresentation { UNSPECIFIED, STRING, DECIMAL128 }
+                public static class MongoConverterConfigurationAdapter {
+                    public MongoConverterConfigurationAdapter bigDecimal(BigDecimalRepresentation representation) {
+                        return this;
+                    }
+                }
+            }
             """
-              package org.springframework.data.mongodb.core.mapping;
-              public @interface Document {}
-              """,
-            """
-              package org.springframework.data.annotation;
-              public @interface Persistent {}
-              """,
-            """
-              package org.springframework.data.mongodb.core.mapping;
-              public enum FieldType { IMPLICIT, STRING, DECIMAL128, OBJECT_ID }
-              """,
-            """
-              package org.springframework.data.mongodb.core.mapping;
-              public @interface Field {
-                  FieldType targetType() default FieldType.IMPLICIT;
-              }
-              """,
-            """
-              package org.springframework.data.mongodb.core.mapping;
-              public @interface MongoId {
-                  FieldType value() default FieldType.IMPLICIT;
-              }
-              """,
-            """
-              package org.springframework.data.mongodb.core.mapping;
-              public @interface DBRef {}
-              """,
-            """
-              package org.springframework.data.mongodb.core.mapping;
-              public @interface DocumentReference {}
-              """,
-            """
-              package org.springframework.data.annotation;
-              public @interface Transient {}
-              """,
-            """
-              package org.springframework.data.annotation;
-              public @interface Id {}
-              """,
-            """
-              package org.bson;
-              public enum UuidRepresentation { UNSPECIFIED, STANDARD, JAVA_LEGACY }
-              """,
-            """
-              package com.mongodb;
-              public final class MongoClientSettings {
-                  public static final class Builder {
-                      public Builder uuidRepresentation(org.bson.UuidRepresentation representation) {
-                          return this;
-                      }
-                  }
-              }
-              """,
-            """
-              package org.springframework.data.mongodb.core.convert;
-              public class MongoCustomConversions {
-                  public enum BigDecimalRepresentation { UNSPECIFIED, STRING, DECIMAL128 }
-                  public static class MongoConverterConfigurationAdapter {
-                      public MongoConverterConfigurationAdapter bigDecimal(BigDecimalRepresentation representation) {
-                          return this;
-                      }
-                  }
-              }
-              """
-          ));
+        ));
     }
 
-    protected static String accountWithUuidAndBigDecimal() {
+    public static String accountWithUuidAndBigDecimal() {
         return """
           package com.example;
 
@@ -126,37 +126,5 @@ abstract class MongoValueRepresentationTestSupport implements RewriteTest {
               private BigDecimal balance;
           }
           """;
-    }
-
-    protected static void assertPropertyMarked(Properties.File file, String property) {
-        AtomicBoolean found = new AtomicBoolean();
-        new PropertiesIsoVisitor<AtomicBoolean>() {
-            @Override
-            public Properties.Entry visitEntry(Properties.Entry entry, AtomicBoolean marked) {
-                Properties.Entry e = super.visitEntry(entry, marked);
-                if (property.equals(e.getKey()) &&
-                        Comments.of(getCursor()).getComments().stream().anyMatch(comment -> comment.contains(property))) {
-                    marked.set(true);
-                }
-                return e;
-            }
-        }.visit(file, found);
-        assertThat(found.get()).as("Expected property '%s' to carry a diagnostic comment", property).isTrue();
-    }
-
-    protected static void assertYamlEntryMarked(Yaml.Documents file, String key) {
-        AtomicBoolean found = new AtomicBoolean();
-        new YamlIsoVisitor<AtomicBoolean>() {
-            @Override
-            public Yaml.Mapping.Entry visitMappingEntry(Yaml.Mapping.Entry entry, AtomicBoolean marked) {
-                Yaml.Mapping.Entry e = super.visitMappingEntry(entry, marked);
-                if (e.getKey() instanceof Yaml.Scalar && key.equals(e.getKey().getValue()) &&
-                        Comments.of(getCursor()).getComments().stream().anyMatch(comment -> comment.contains(key))) {
-                    marked.set(true);
-                }
-                return e;
-            }
-        }.visit(file, found);
-        assertThat(found.get()).as("Expected YAML entry '%s' to carry a diagnostic comment", key).isTrue();
     }
 }

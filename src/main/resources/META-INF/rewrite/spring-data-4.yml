@@ -86,5 +86,7 @@ recipeList:
       artifactId: mongodb-driver-legacy
       newVersion: 5.6.x
       overrideManagedVersion: false
-  # Existing persisted data determines the correct representation, so report rather than choose one.
+  # Existing persisted data determines the correct representation, so report and suggest rather than choose one.
   - org.openrewrite.java.spring.data.search.FindMissingMongoValueRepresentation
+  - org.openrewrite.java.spring.data.AddMongoValueRepresentationProperty
+

@@ -43,10 +43,6 @@ public class MongoValueRepresentationFields extends DataTable<MongoValueRepresen
                 description = "The affected field name.")
         String field;
 
-        @Column(displayName = "Value type",
-                description = "The value representation category that requires configuration.")
-        String valueType;
-
         @Column(displayName = "Configuration property",
                 description = "The Spring configuration property that can supply the project-wide representation.")
         String configurationProperty;

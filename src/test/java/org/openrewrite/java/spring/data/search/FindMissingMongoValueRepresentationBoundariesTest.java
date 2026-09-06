@@ -17,6 +17,7 @@ package org.openrewrite.java.spring.data.search;
 
 import org.junit.jupiter.api.Test;
 import org.openrewrite.java.spring.table.MongoValueRepresentationFields;
+import org.openrewrite.test.RecipeSpec;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.openrewrite.java.Assertions.java;
@@ -25,7 +26,18 @@ import static org.openrewrite.maven.Assertions.pomXml;
 import static org.openrewrite.properties.Assertions.properties;
 import static org.openrewrite.yaml.Assertions.yaml;
 
+/**
+ * Boundaries of what counts as an occurrence and what counts as already configured. Only
+ * data-table membership is asserted here; the corresponding file-mutation behavior is covered by
+ * {@code AddMongoValueRepresentationPropertyBoundariesTest}.
+ */
 class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepresentationTestSupport {
+
+    @Override
+    public void defaults(RecipeSpec spec) {
+        super.defaults(spec);
+        spec.recipe(new FindMissingMongoValueRepresentation());
+    }
 
     @Test
     void ignoresNonMongoAndTransientFields() {
@@ -105,11 +117,10 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
     @Test
     void fieldLevelMongoAnnotationsQualifyWithoutDocumentAnnotation() {
         rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3)
-            .dataTable(MongoValueRepresentationFields.Row.class, rows ->
-              assertThat(rows)
-                .extracting(MongoValueRepresentationFields.Row::getField)
-                .containsExactlyInAnyOrder("mongoId", "reference", "linked")),
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
+            assertThat(rows)
+              .extracting(MongoValueRepresentationFields.Row::getField)
+              .containsExactlyInAnyOrder("mongoId", "reference", "linked")),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -132,15 +143,25 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                     private UUID linked;
                 }
                 """,
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
-                  .actual())
+              """
+                package com.example;
+
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.DBRef;
+                import org.springframework.data.mongodb.core.mapping.DocumentReference;
+                import org.springframework.data.mongodb.core.mapping.MongoId;
+
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/@MongoId
+                    private UUID mongoId;
+
+                    /*~~(missing MongoDB value representation configuration)~~>*/@DocumentReference
+                    private UUID reference;
+
+                    /*~~(missing MongoDB value representation configuration)~~>*/@DBRef
+                    private UUID linked;
+                }
+                """
             )
           )
         );
@@ -173,11 +194,10 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
     @Test
     void reportsNestedValuesButNotMapKeys() {
         rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3)
-            .dataTable(MongoValueRepresentationFields.Row.class, rows ->
-              assertThat(rows)
-                .extracting(MongoValueRepresentationFields.Row::getField)
-                .containsExactlyInAnyOrder("externalIds", "balances")),
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
+            assertThat(rows)
+              .extracting(MongoValueRepresentationFields.Row::getField)
+              .containsExactlyInAnyOrder("externalIds", "balances")),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -197,25 +217,112 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                     private Map<String, BigDecimal> balances;
                 }
                 """,
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
-                  .contains("spring.data.mongodb.representation.big-decimal=UNSPECIFIED")
-                  .actual())
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import java.util.List;
+                import java.util.Map;
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/private List<UUID> externalIds;
+                    private Map<UUID, String> labelsByExternalId;
+                    /*~~(missing MongoDB value representation configuration)~~>*/private Map<String, BigDecimal> balances;
+                }
+                """
             )
           )
         );
     }
 
     @Test
-    void testJavaConfigurationDoesNotSuppressMainDiagnostics() {
+    void reportsArrayTypedFields() {
         rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3),
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
+            assertThat(rows)
+              .extracting(MongoValueRepresentationFields.Row::getField)
+              .containsExactlyInAnyOrder("externalIds")),
+          mavenProject("app",
+            pomXml(MINIMAL_POM),
+            java(
+              """
+                package com.example;
+
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                @Document
+                class Account {
+                    private UUID[] externalIds;
+                }
+                """,
+              """
+                package com.example;
+
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/private UUID[] externalIds;
+                }
+                """
+            )
+          )
+        );
+    }
+
+    @Test
+    void explicitImplicitFieldTargetTypeIsStillReported() {
+        // FieldType.IMPLICIT is the default value; setting it explicitly is not an override.
+        rewriteRun(
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
+            assertThat(rows)
+              .extracting(MongoValueRepresentationFields.Row::getField)
+              .containsExactlyInAnyOrder("balance")),
+          mavenProject("app",
+            pomXml(MINIMAL_POM),
+            java(
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import org.springframework.data.mongodb.core.mapping.Document;
+                import org.springframework.data.mongodb.core.mapping.Field;
+                import org.springframework.data.mongodb.core.mapping.FieldType;
+
+                @Document
+                class Account {
+                    @Field(targetType = FieldType.IMPLICIT)
+                    private BigDecimal balance;
+                }
+                """,
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import org.springframework.data.mongodb.core.mapping.Document;
+                import org.springframework.data.mongodb.core.mapping.Field;
+                import org.springframework.data.mongodb.core.mapping.FieldType;
+
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/@Field(targetType = FieldType.IMPLICIT)
+                    private BigDecimal balance;
+                }
+                """
+            )
+          )
+        );
+    }
+
+    @Test
+    void invalidJavaConfigurationDoesNotSuppressReporting() {
+        rewriteRun(
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(1)),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -230,6 +337,17 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                     private UUID externalId;
                 }
                 """,
+              """
+                package com.example;
+
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/private UUID externalId;
+                }
+                """,
               spec -> spec.path("src/main/java/com/example/Account.java")
             ),
             java(
@@ -237,110 +355,39 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                 package com.example;
 
                 import com.mongodb.MongoClientSettings;
-                import org.bson.UuidRepresentation;
 
-                class TestMongoConfiguration {
+                class MongoConfiguration {
                     void configure(MongoClientSettings.Builder builder) {
-                        builder.uuidRepresentation(UuidRepresentation.STANDARD);
-                    }
-                }
-                """,
-              spec -> spec.path("src/test/java/com/example/TestMongoConfiguration.java")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
-                  .actual())
-            )
-          )
-        );
-    }
-
-    @Test
-    void nullJavaConfigurationDoesNotSuppressDiagnostics() {
-        rewriteRun(
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
-              accountWithUuidAndBigDecimal(),
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            java(
-              """
-                package com.example;
-
-                import com.mongodb.MongoClientSettings;
-                import org.springframework.data.mongodb.core.convert.MongoCustomConversions.MongoConverterConfigurationAdapter;
-
-                class MongoConfiguration {
-                    void configure(MongoClientSettings.Builder builder,
-                                   MongoConverterConfigurationAdapter adapter) {
                         builder.uuidRepresentation(null);
-                        adapter.bigDecimal(null);
                     }
                 }
-                """,
-              spec -> spec.after(actual -> assertThat(actual)
-                .contains("// `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.")
-                .contains("builder.uuidRepresentation(null)")
-                .contains("// `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.")
-                .contains("adapter.bigDecimal(null)")
-                .doesNotContain("~~(")
-                .actual())
+                """
             )
           )
         );
     }
 
     @Test
-    void explicitUnspecifiedJavaConfigurationDoesNotSuppressDiagnostics() {
+    void testResourceConfigurationDoesNotSuppressMainReporting() {
         rewriteRun(
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(2)),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
               accountWithUuidAndBigDecimal(),
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            java(
               """
                 package com.example;
 
-                import com.mongodb.MongoClientSettings;
-                import org.bson.UuidRepresentation;
-                import org.springframework.data.mongodb.core.convert.MongoCustomConversions.BigDecimalRepresentation;
-                import org.springframework.data.mongodb.core.convert.MongoCustomConversions.MongoConverterConfigurationAdapter;
+                import java.math.BigDecimal;
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
 
-                class MongoConfiguration {
-                    void configure(MongoClientSettings.Builder builder,
-                                   MongoConverterConfigurationAdapter adapter) {
-                        builder.uuidRepresentation(UuidRepresentation.UNSPECIFIED);
-                        adapter.bigDecimal(BigDecimalRepresentation.UNSPECIFIED);
-                    }
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/private UUID externalId;
+                    /*~~(missing MongoDB value representation configuration)~~>*/private BigDecimal balance;
                 }
                 """,
-              spec -> spec.after(actual -> assertThat(actual)
-                .contains("// `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.")
-                .contains("builder.uuidRepresentation(UuidRepresentation.UNSPECIFIED)")
-                .contains("// `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.")
-                .contains("adapter.bigDecimal(BigDecimalRepresentation.UNSPECIFIED)")
-                .doesNotContain("~~(")
-                .actual())
-            )
-          )
-        );
-    }
-
-    @Test
-    void testResourceConfigurationDoesNotSuppressMainDiagnostics() {
-        rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
-              accountWithUuidAndBigDecimal(),
               spec -> spec.path("src/main/java/com/example/Account.java")
             ),
             properties(
@@ -349,15 +396,6 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                 spring.data.mongodb.representation.big-decimal=decimal128
                 """,
               spec -> spec.path("src/test/resources/application.properties")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
-                  .contains("spring.data.mongodb.representation.big-decimal=UNSPECIFIED")
-                  .actual())
             )
           )
         );
@@ -366,11 +404,24 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
     @Test
     void unrelatedMainResourceIsNotUsedAsConfigurationTarget() {
         rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3),
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(2)),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
               accountWithUuidAndBigDecimal(),
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/private UUID externalId;
+                    /*~~(missing MongoDB value representation configuration)~~>*/private BigDecimal balance;
+                }
+                """,
               spec -> spec.path("src/main/java/com/example/Account.java")
             ),
             yaml(
@@ -379,27 +430,33 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                   level: INFO
                 """,
               spec -> spec.path("src/main/resources/logback.yml")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
-                  .contains("spring.data.mongodb.representation.big-decimal=UNSPECIFIED")
-                  .actual())
             )
           )
         );
     }
 
     @Test
-    void malformedYamlValuesMarkExistingEntries() {
+    void malformedYamlValuesDoNotSuppressReporting() {
         rewriteRun(
           spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows -> assertThat(rows).hasSize(2)),
           mavenProject("app",
             pomXml(MINIMAL_POM),
-            java(accountWithUuidAndBigDecimal()),
+            java(
+              accountWithUuidAndBigDecimal(),
+              """
+                package com.example;
+
+                import java.math.BigDecimal;
+                import java.util.UUID;
+                import org.springframework.data.mongodb.core.mapping.Document;
+
+                @Document
+                class Account {
+                    /*~~(missing MongoDB value representation configuration)~~>*/private UUID externalId;
+                    /*~~(missing MongoDB value representation configuration)~~>*/private BigDecimal balance;
+                }
+                """
+            ),
             yaml(
               """
                 spring:
@@ -413,26 +470,7 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                         big-decimal:
                           - decimal128
                 """,
-              """
-                spring:
-                  mongodb:
-                    representation:
-                      # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
-                      uuid:
-                        unsupported: value
-                  data:
-                    mongodb:
-                      representation:
-                        # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
-                        big-decimal:
-                          - decimal128
-                """,
-              spec -> spec
-                .path("src/main/resources/application.yml")
-                .afterRecipe(file -> {
-                    assertYamlEntryMarked(file, "uuid");
-                    assertYamlEntryMarked(file, "big-decimal");
-                })
+              spec -> spec.path("src/main/resources/application.yml")
             )
           )
         );
@@ -441,12 +479,11 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
     @Test
     void reportsSharedDeclarationWhenOneBigIntegerIsNotAnId() {
         rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3)
-            .dataTable(MongoValueRepresentationFields.Row.class, rows ->
-              assertThat(rows)
-                .singleElement()
-                .extracting(MongoValueRepresentationFields.Row::getField)
-                .isEqualTo("sequence")),
+          spec -> spec.dataTable(MongoValueRepresentationFields.Row.class, rows ->
+            assertThat(rows)
+              .singleElement()
+              .extracting(MongoValueRepresentationFields.Row::getField)
+              .isEqualTo("sequence")),
           mavenProject("app",
             pomXml(MINIMAL_POM),
             java(
@@ -461,47 +498,17 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                     private BigInteger id, sequence;
                 }
                 """,
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.data.mongodb.representation.big-decimal=UNSPECIFIED")
-                  .actual())
-            )
-          )
-        );
-    }
-
-    @Test
-    void isIdempotent() {
-        rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
               """
                 package com.example;
 
-                import java.util.UUID;
+                import java.math.BigInteger;
                 import org.springframework.data.mongodb.core.mapping.Document;
 
                 @Document
                 class Account {
-                    private UUID externalId;
+                    /*~~(missing MongoDB value representation configuration)~~>*/private BigInteger id, sequence;
                 }
-                """,
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
-                  .actual())
+                """
             )
           )
         );
@@ -522,191 +529,6 @@ class FindMissingMongoValueRepresentationBoundariesTest extends MongoValueRepres
                   private UUID externalId;
               }
               """
-          )
-        );
-    }
-
-    @Test
-    void faultyJavaConfigurationForOneKindCoexistsWithBaselineGenerationForAnother() {
-        rewriteRun(
-          spec -> spec.cycles(4).expectedCyclesThatMakeChanges(3),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
-              accountWithUuidAndBigDecimal(),
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            java(
-              """
-                package com.example;
-
-                import com.mongodb.MongoClientSettings;
-
-                class MongoConfiguration {
-                    void configure(MongoClientSettings.Builder builder) {
-                        builder.uuidRepresentation(null);
-                    }
-                }
-                """,
-              spec -> spec.after(actual -> assertThat(actual)
-                .contains("// `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.")
-                .contains("builder.uuidRepresentation(null)")
-                .doesNotContain("~~(")
-                .actual())
-            ),
-            properties(
-              null,
-              spec -> spec
-                .path("src/main/resources/application.properties")
-                .after(actual -> assertThat(actual)
-                  .contains("spring.data.mongodb.representation.big-decimal=UNSPECIFIED")
-                  .doesNotContain("spring.mongodb.representation.uuid")
-                  .actual())
-            )
-          )
-        );
-    }
-
-    @Test
-    void doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestion() {
-        // Steady state after a prior cycle created and commented the UNSPECIFIED suggestion: scanning
-        // must count it as an existing attempt, else propertiesToAdd would emit a duplicate.
-        rewriteRun(
-          spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
-              """
-                package com.example;
-
-                import java.util.UUID;
-                import org.springframework.data.mongodb.core.mapping.Document;
-
-                @Document
-                class Account {
-                    private UUID externalId;
-                }
-                """,
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            properties(
-              """
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
-                spring.mongodb.representation.uuid=UNSPECIFIED
-                """,
-              spec -> spec.path("src/main/resources/application.properties")
-            )
-          )
-        );
-    }
-
-    @Test
-    void doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestionInYaml() {
-        // YAML equivalent of doesNotDuplicateAnAlreadyCommentedOutPlaceholderSuggestion.
-        rewriteRun(
-          spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(
-              """
-                package com.example;
-
-                import java.util.UUID;
-                import org.springframework.data.mongodb.core.mapping.Document;
-
-                @Document
-                class Account {
-                    private UUID externalId;
-                }
-                """,
-              spec -> spec.path("src/main/java/com/example/Account.java")
-            ),
-            yaml(
-              """
-                spring:
-                  application:
-                    name: example
-                  mongodb:
-                    representation:
-                      # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
-                      uuid: UNSPECIFIED
-                """,
-              spec -> spec.path("src/main/resources/application.yml")
-            )
-          )
-        );
-    }
-
-    @Test
-    void doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage() {
-        // A later invocation over an already-annotated file: the still-invalid entry stays visible
-        // to the scanner every cycle, so re-commenting relies on Comments.of(...)'s own idempotency
-        // to leave the file byte-for-byte unchanged.
-        rewriteRun(
-          spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(accountWithUuidAndBigDecimal()),
-            properties(
-              """
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
-                spring.mongodb.representation.uuid=unsupported
-                spring.data.mongodb.representation.big-decimal=decimal128
-                """,
-              spec -> spec.path("src/main/resources/application.properties")
-            )
-          )
-        );
-    }
-
-    @Test
-    void doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessageInYaml() {
-        // YAML equivalent of doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage.
-        rewriteRun(
-          spec -> spec.cycles(2).expectedCyclesThatMakeChanges(1),
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(accountWithUuidAndBigDecimal()),
-            yaml(
-              """
-                spring:
-                  mongodb:
-                    representation:
-                      # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
-                      uuid: unsupported
-                  data:
-                    mongodb:
-                      representation:
-                        big-decimal: decimal128
-                """,
-              spec -> spec.path("src/main/resources/application.yml")
-            )
-          )
-        );
-    }
-
-    @Test
-    void doesNotDuplicateAnAlreadyCommentedInvalidJavaConfigurationMessage() {
-        // Java equivalent of doesNotDuplicateAnAlreadyCommentedInvalidPropertyMessage.
-        rewriteRun(
-          mavenProject("app",
-            pomXml(MINIMAL_POM),
-            java(accountWithUuidAndBigDecimal()),
-            java(
-              """
-                package com.example;
-
-                import com.mongodb.MongoClientSettings;
-
-                class MongoConfiguration {
-                    void configure(MongoClientSettings.Builder builder) {
-                        // `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
-                        builder.uuidRepresentation(null);
-                    }
-                }
-                """,
-              spec -> spec.path("src/main/java/com/example/MongoConfiguration.java")
-            )
           )
         );
     }
