@@ -52,24 +52,22 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.openrewrite.java.spring.data.MongoValueRepresentationAccumulator.hasKind;
-import static org.openrewrite.java.spring.data.MongoValueRepresentationKind.UNSPECIFIED_VALUE;
 
 /**
- * Adds a placeholder value-representation property (or flags an existing invalid one) for the
- * MongoDB-mapped UUID/BigDecimal/BigInteger fields found by
- * {@link FindMissingMongoValueRepresentation}, without itself choosing a representation on the
- * user's behalf.
+ * Adds explicit value-representation properties that preserve the Spring Data MongoDB 4 defaults
+ * for MongoDB-mapped UUID/BigDecimal/BigInteger fields found by
+ * {@link FindMissingMongoValueRepresentation}. Existing invalid configuration is flagged in place
+ * rather than overwritten.
  */
 public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoValueRepresentationAccumulator> {
 
     @Getter
-    final String displayName = "Add a placeholder MongoDB value representation property";
+    final String displayName = "Add MongoDB value representation property";
 
     @Getter
-    final String description = "Add a placeholder value-representation property for MongoDB-mapped UUID, BigInteger, " +
-            "and BigDecimal fields that require one when migrating to Spring Data MongoDB 5, and flag any existing " +
-            "configuration whose value isn't a concrete representation, without choosing a representation on the " +
-            "user's behalf.";
+    final String description = "Add a value-representation property for MongoDB-mapped UUID, BigInteger, and BigDecimal fields " +
+            "that require one when migrating to Spring Data MongoDB 5, preserving the Spring Data MongoDB 4 defaults for " +
+            "previously unconfigured applications and flagging existing invalid configuration.";
 
     @Override
     public MongoValueRepresentationAccumulator getInitialValue(ExecutionContext ctx) {
@@ -154,7 +152,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
                 }
                 Properties.File changed = file;
                 for (MongoValueRepresentationKind kind : diagnosis.propertiesToAdd) {
-                    changed = (Properties.File) addUnspecifiedPropertySuggestion(changed, kind, ctx);
+                    changed = (Properties.File) addSpringData4DefaultProperty(changed, kind, ctx);
                 }
                 return diagnosis.issues.isEmpty() ? changed :
                         markPropertiesConfigurationIssues(changed, diagnosis.issues, getCursor().getParentOrThrow());
@@ -172,7 +170,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
                 }
                 Yaml.Documents changed = documents;
                 for (MongoValueRepresentationKind kind : diagnosis.propertiesToAdd) {
-                    changed = (Yaml.Documents) addUnspecifiedPropertySuggestion(changed, kind, ctx);
+                    changed = (Yaml.Documents) addSpringData4DefaultProperty(changed, kind, ctx);
                 }
                 return diagnosis.issues.isEmpty() ? changed : markYamlConfigurationIssues(changed, diagnosis.issues, ctx);
             }
@@ -187,7 +185,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
 
     /**
      * What (if anything) this configuration file needs done: existing invalid values to flag, and/or
-     * suggested properties to add if it's the project's preferred configuration source. Null when
+     * default-preserving properties to add if it's the project's preferred configuration source. Null when
      * there's nothing for this file — no project marker, no affected fields, or nothing actionable.
      */
     private static @Nullable Diagnosis diagnose(SourceFile source, MongoValueRepresentationAccumulator acc) {
@@ -205,9 +203,9 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
     }
 
     /**
-     * A file only receives new suggestions when it's the project's preferred configuration source.
+     * A file only receives new defaults when it's the project's preferred configuration source.
      * Only base {@code application.*} files are ever recorded as preferred — a profile-specific file
-     * only loads conditionally, so a suggestion placed there wouldn't protect every other profile.
+     * only loads conditionally, so a value placed there wouldn't protect every other profile.
      */
     private static List<MongoValueRepresentationKind> propertiesToAddTo(Path sourcePath, MongoValueRepresentationAccumulator acc,
                                                                           JavaProject project) {
@@ -229,8 +227,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
     /**
      * Generates a baseline {@code application.properties} for a project with affected fields but no
      * base Spring configuration file — only a profile-specific one, or none at all — fully populated
-     * up front (the suggested property, and its diagnostic comment, are both written here) so no
-     * further cycle is needed to finish it off.
+     * up front with the Spring Data MongoDB 4 defaults so no further cycle is needed to finish it off.
      */
     @Override
     public Collection<? extends SourceFile> generate(MongoValueRepresentationAccumulator acc, ExecutionContext ctx) {
@@ -265,7 +262,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
         SourceFile file = parsed.get().withSourcePath(path);
         file = file.withMarkers(file.getMarkers().addIfAbsent(project));
         for (MongoValueRepresentationKind kind : kindsNeedingSuggestion) {
-            file = addUnspecifiedPropertySuggestion(file, kind, ctx);
+            file = addSpringData4DefaultProperty(file, kind, ctx);
         }
         return file;
     }
@@ -298,14 +295,14 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
     }
 
     /**
-     * Suggests the property carrying {@link MongoValueRepresentationKind#UNSPECIFIED_VALUE},
-     * with the same message an existing invalid value would get from {@link #markPropertiesConfigurationIssues}
-     * or {@link #markYamlConfigurationIssues}.
+     * Adds the concrete representation used implicitly by Spring Data MongoDB 4. The diagnostic
+     * comment remains as a reminder that the explicit value should match the application's existing
+     * BSON data, while the inserted value itself preserves the framework's previous default.
      */
-    private static SourceFile addUnspecifiedPropertySuggestion(SourceFile source, MongoValueRepresentationKind kind, ExecutionContext ctx) {
+    private static SourceFile addSpringData4DefaultProperty(SourceFile source, MongoValueRepresentationKind kind, ExecutionContext ctx) {
         String path = source.getSourcePath().toString().replace('\\', '/');
         return (SourceFile) new AddSpringProperty(
-                kind.configurationProperty, UNSPECIFIED_VALUE, kind.invalidPropertyMessage, Collections.singletonList(path))
+                kind.configurationProperty, kind.springData4DefaultValue, kind.invalidPropertyMessage, Collections.singletonList(path))
                 .getVisitor().visitNonNull(source, ctx);
     }
 

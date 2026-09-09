@@ -93,7 +93,7 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
               spec -> spec
                 .path("src/main/resources/application.properties")
                 .after(actual -> assertThat(actual)
-                  .contains("spring.mongodb.representation.uuid=UNSPECIFIED")
+                  .contains("spring.mongodb.representation.uuid=java-legacy")
                   .actual())
             )
           )

@@ -26,6 +26,7 @@ import java.util.Set;
  * Data MongoDB 5, and the Spring configuration property that supplies it.
  */
 public enum MongoValueRepresentationKind {
+    // Spring Data MongoDB 4 configures JAVA_LEGACY when no UUID representation is supplied.
     // Mirrors org.bson.UuidRepresentation, excluding UNSPECIFIED (not a valid choice).
     UUID("spring.mongodb.representation.uuid",
             "`spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.",
@@ -33,28 +34,28 @@ public enum MongoValueRepresentationKind {
             // a project not yet through that migration may still carry the old key, and its value (if concrete) is just
             // as valid a signal that UUID representation is already configured.
             "spring.data.mongodb.uuid-representation",
+            "java-legacy",
             "standard", "java-legacy", "c-sharp-legacy", "python-legacy"),
+    // Spring Data MongoDB 4 configures STRING when no BigDecimal/BigInteger representation is supplied.
     // Mirrors Spring Data MongoDB's BigDecimalRepresentation, excluding UNSPECIFIED.
     BIG_NUMBER("spring.data.mongodb.representation.big-decimal",
             "`spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.",
             null,
+            "string",
             "string", "decimal128");
-
-    // Value a suggested-but-unchosen property is created with: a real, bindable enum constant (not
-    // placeholder text), so a project that never follows up still starts up — as unconfigured as
-    // before, and treated like a user-written UNSPECIFIED (isConfiguredValue excludes it).
-    public static final String UNSPECIFIED_VALUE = "UNSPECIFIED";
 
     public final String configurationProperty;
     public final String invalidPropertyMessage;
     final @Nullable String legacyConfigurationProperty;
+    final String springData4DefaultValue;
     private final Set<String> supportedValues;
 
     MongoValueRepresentationKind(String configurationProperty, String invalidPropertyMessage,
-              @Nullable String legacyConfigurationProperty, String... supportedValues) {
+              @Nullable String legacyConfigurationProperty, String springData4DefaultValue, String... supportedValues) {
         this.configurationProperty = configurationProperty;
         this.invalidPropertyMessage = invalidPropertyMessage;
         this.legacyConfigurationProperty = legacyConfigurationProperty;
+        this.springData4DefaultValue = springData4DefaultValue;
         this.supportedValues = new HashSet<>();
         for (String supportedValue : supportedValues) {
             this.supportedValues.add(normalize(supportedValue));
