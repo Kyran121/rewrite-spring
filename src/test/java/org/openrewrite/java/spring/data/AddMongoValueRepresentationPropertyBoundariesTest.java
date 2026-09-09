@@ -161,9 +161,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -216,9 +214,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -248,9 +244,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -285,9 +279,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -315,9 +307,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -367,9 +357,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -397,9 +385,7 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -484,7 +470,6 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -495,9 +480,8 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
 
     @Test
     void generatingABaselineFileIsIdempotentOnASecondRun() {
-        // rewriteRun already runs 2 cycles and expects changes to settle after the first, so this
-        // relies on nothing but that default: the file generate() creates in cycle 1 must not pick
-        // up a further, differently formatted comment on top of the one from that first cycle.
+        // rewriteRun already runs 2 cycles and expects changes to settle after the first, so the
+        // file generated in cycle 1 must remain byte-for-byte unchanged on the second cycle.
         rewriteRun(
           mavenProject("app",
             pomXml(MINIMAL_POM),
@@ -518,7 +502,6 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties(
               null,
               """
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")

@@ -51,9 +51,7 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -74,9 +72,7 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
                 """,
               """
                 spring.application.name=example
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -103,12 +99,10 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
                     name: example
                   mongodb:
                     representation:
-                      # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                       uuid: java-legacy
                   data:
                     mongodb:
                       representation:
-                        # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                         big-decimal: string
                 """,
               spec -> spec.path("src/main/resources/application.yml")
@@ -129,9 +123,7 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
                 """,
               """
                 spring.application.name=example
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
@@ -169,9 +161,7 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
             properties(
               null,
               """
-                # `spring.data.mongodb.representation.big-decimal` needs a concrete big-number representation matching the existing BSON data.
                 spring.data.mongodb.representation.big-decimal=string
-                # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")

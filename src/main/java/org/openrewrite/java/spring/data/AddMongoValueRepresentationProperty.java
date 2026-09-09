@@ -295,14 +295,14 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
     }
 
     /**
-     * Adds the concrete representation used implicitly by Spring Data MongoDB 4. The diagnostic
-     * comment remains as a reminder that the explicit value should match the application's existing
-     * BSON data, while the inserted value itself preserves the framework's previous default.
+     * Adds the concrete representation used implicitly by Spring Data MongoDB 4. No diagnostic is
+     * needed when configuration was absent because the inserted value preserves the framework's
+     * previous default.
      */
     private static SourceFile addSpringData4DefaultProperty(SourceFile source, MongoValueRepresentationKind kind, ExecutionContext ctx) {
         String path = source.getSourcePath().toString().replace('\\', '/');
         return (SourceFile) new AddSpringProperty(
-                kind.configurationProperty, kind.springData4DefaultValue, kind.invalidPropertyMessage, Collections.singletonList(path))
+                kind.configurationProperty, kind.springData4DefaultValue, null, Collections.singletonList(path))
                 .getVisitor().visitNonNull(source, ctx);
     }
 
