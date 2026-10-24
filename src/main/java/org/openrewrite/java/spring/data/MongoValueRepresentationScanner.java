@@ -315,15 +315,13 @@ public final class MongoValueRepresentationScanner {
     private static void scanPropertiesProperty(Properties.File file, JavaProject project, MongoValueRepresentationAccumulator acc,
                                                 MongoValueRepresentationKind kind, String propertyKey, boolean baseFile) {
         Set<Properties.Entry> entries = FindProperties.find(file, propertyKey, true);
-        if (entries.isEmpty()) {
-            return;
-        }
-        if (baseFile) {
-            acc.markPropertyAttempted(kind, project);
-        }
         for (Properties.Entry entry : entries) {
+            boolean unconditional = baseFile && !isProfileSpecificPropertiesEntry(file, entry);
+            if (unconditional) {
+                acc.markPropertyAttempted(kind, project);
+            }
             if (kind.isConfiguredValue(entry.getValue().getText())) {
-                if (baseFile) {
+                if (unconditional) {
                     acc.markConfigured(kind, project);
                 }
             } else {
@@ -332,22 +330,51 @@ public final class MongoValueRepresentationScanner {
         }
     }
 
+    private static boolean isProfileSpecificPropertiesEntry(Properties.File file, Properties.Entry target) {
+        java.util.List<Properties.Content> section = new java.util.ArrayList<>();
+        for (Properties.Content content : file.getContent()) {
+            if (content instanceof Properties.Comment && content.printAll().trim().matches("[#!]\\\\s*---")) {
+                if (section.contains(target)) {
+                    return hasProfileActivation(section);
+                }
+                section.clear();
+            } else {
+                section.add(content);
+            }
+        }
+        return section.contains(target) && hasProfileActivation(section);
+    }
+
+    private static boolean hasProfileActivation(java.util.List<Properties.Content> section) {
+        for (Properties.Content content : section) {
+            if (content instanceof Properties.Entry) {
+                String key = ((Properties.Entry) content).getKey();
+                if ("spring.config.activate.on-profile".equals(key) || "spring.profiles".equals(key)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static void scanYamlProperty(Yaml.Documents documents, JavaProject project, MongoValueRepresentationAccumulator acc,
                                           MongoValueRepresentationKind kind, String propertyKey, boolean baseFile) {
-        Set<Yaml.Block> values = FindProperty.find(documents, propertyKey, true);
-        if (values.isEmpty()) {
-            return;
-        }
-        if (baseFile) {
-            acc.markPropertyAttempted(kind, project);
-        }
-        for (Yaml.Block value : values) {
-            if (value instanceof Yaml.Scalar && kind.isConfiguredValue(((Yaml.Scalar) value).getValue())) {
-                if (baseFile) {
-                    acc.markConfigured(kind, project);
+        for (Yaml.Document document : documents.getDocuments()) {
+            Yaml.Documents isolated = documents.withDocuments(java.util.Collections.singletonList(document));
+            boolean unconditional = baseFile &&
+                    FindProperty.find(isolated, "spring.config.activate.on-profile", true).isEmpty() &&
+                    FindProperty.find(isolated, "spring.profiles", true).isEmpty();
+            for (Yaml.Block value : FindProperty.find(isolated, propertyKey, true)) {
+                if (unconditional) {
+                    acc.markPropertyAttempted(kind, project);
                 }
-            } else {
-                acc.addConfigurationIssue(project, new ConfigurationIssue(documents.getSourcePath(), value.getId(), kind));
+                if (value instanceof Yaml.Scalar && kind.isConfiguredValue(((Yaml.Scalar) value).getValue())) {
+                    if (unconditional) {
+                        acc.markConfigured(kind, project);
+                    }
+                } else {
+                    acc.addConfigurationIssue(project, new ConfigurationIssue(documents.getSourcePath(), value.getId(), kind));
+                }
             }
         }
     }
