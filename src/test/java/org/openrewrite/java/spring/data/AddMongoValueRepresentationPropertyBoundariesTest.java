@@ -125,9 +125,9 @@ class AddMongoValueRepresentationPropertyBoundariesTest extends MongoValueRepres
             properties("""
               spring.mongodb.representation.uuid=UNSPECIFIED
               """, """
+              spring.data.mongodb.representation.big-decimal=string
               # `spring.mongodb.representation.uuid` needs a concrete UUID representation matching the existing BSON data.
               spring.mongodb.representation.uuid=UNSPECIFIED
-              spring.data.mongodb.representation.big-decimal=string
               """, spec -> spec.path("src/main/resources/application.properties"))
           )
         );
