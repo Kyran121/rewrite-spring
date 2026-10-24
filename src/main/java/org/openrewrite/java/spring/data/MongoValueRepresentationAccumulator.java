@@ -74,7 +74,7 @@ public class MongoValueRepresentationAccumulator {
             return true;
         }
         Path source = mainSourcePath(project);
-        return source != null && bootBuildRoots.stream().anyMatch(source::startsWith);
+        return source != null && bootBuildRoots.stream().anyMatch(root -> root.toString().isEmpty() || source.startsWith(root));
     }
 
     public Set<JavaProject> bootProjects() {
