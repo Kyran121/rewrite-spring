@@ -40,6 +40,7 @@ public class MongoValueRepresentationAccumulator {
     private final Map<JavaProject, ConcurrentLinkedQueue<ConfigurationIssue>> configurationIssues = new ConcurrentHashMap<>();
     private final Map<JavaProject, Path> preferredConfigurationSource = new ConcurrentHashMap<>();
     private final Set<JavaProject> bootProjects = ConcurrentHashMap.newKeySet();
+    private final Set<Path> bootBuildRoots = ConcurrentHashMap.newKeySet();
     private final Map<JavaProject, Path> projectSourcePaths = new ConcurrentHashMap<>();
     private final Set<JavaProject> rowsInserted = ConcurrentHashMap.newKeySet();
 
@@ -63,12 +64,23 @@ public class MongoValueRepresentationAccumulator {
         bootProjects.add(project);
     }
 
+    public void recordBootBuild(Path buildPath) {
+        Path root = buildPath.getParent();
+        bootBuildRoots.add(root == null ? buildPath.getFileSystem().getPath("") : root);
+    }
+
     public boolean isBootProject(JavaProject project) {
-        return bootProjects.contains(project);
+        if (bootProjects.contains(project)) {
+            return true;
+        }
+        Path source = mainSourcePath(project);
+        return source != null && bootBuildRoots.stream().anyMatch(source::startsWith);
     }
 
     public Set<JavaProject> bootProjects() {
-        return bootProjects;
+        Set<JavaProject> projects = new HashSet<>(projectSourcePaths.keySet());
+        projects.removeIf(project -> !isBootProject(project));
+        return projects;
     }
 
     public void recordMainSource(JavaProject project, Path path) {
