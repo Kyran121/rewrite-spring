@@ -131,7 +131,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
         if (project == null) {
             return null;
         }
-        for (ConfigurationIssue issue : acc.configurationIssuesIn(sourcePath, project, acc.projectOccurrences(project))) {
+        for (ConfigurationIssue issue : acc.configurationIssuesIn(sourcePath, project)) {
             if (issue.getTreeId().equals(treeId)) {
                 return issue.getKind();
             }
@@ -291,6 +291,38 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
      * previous default.
      */
     private static SourceFile addSpringData4DefaultProperty(SourceFile source, MongoValueRepresentationKind kind, ExecutionContext ctx) {
+        if (source instanceof Properties.File) {
+            Properties.File file = (Properties.File) source;
+            List<Properties.Content> content = file.getContent();
+            for (int i = 0; i < content.size(); i++) {
+                Properties.Content item = content.get(i);
+                if (item instanceof Properties.Comment &&
+                        "---".equals(((Properties.Comment) item).getMessage().trim())) {
+                    Properties.File base = file.withContent(new ArrayList<>(content.subList(0, i)));
+                    Properties.File updatedBase = (Properties.File) addSpringData4DefaultProperty(base, kind, ctx);
+                    List<Properties.Content> joined = new ArrayList<>(updatedBase.getContent());
+                    joined.addAll(content.subList(i, content.size()));
+                    return file.withContent(joined);
+                }
+            }
+        }
+        if (source instanceof Yaml.Documents) {
+            Yaml.Documents documents = (Yaml.Documents) source;
+            List<Yaml.Document> all = documents.getDocuments();
+            if (all.size() > 1) {
+                for (int i = 0; i < all.size(); i++) {
+                    Yaml.Documents candidate = documents.withDocuments(singletonList(all.get(i)));
+                    if (org.openrewrite.yaml.search.FindProperty.find(candidate, "spring.config.activate.on-profile", true).isEmpty() &&
+                            org.openrewrite.yaml.search.FindProperty.find(candidate, "spring.profiles", true).isEmpty()) {
+                        Yaml.Documents changed = (Yaml.Documents) addSpringData4DefaultProperty(candidate, kind, ctx);
+                        List<Yaml.Document> joined = new ArrayList<>(all);
+                        joined.set(i, changed.getDocuments().get(0));
+                        return documents.withDocuments(joined);
+                    }
+                }
+            }
+        }
+
         String path = source.getSourcePath().toString().replace('\\', '/');
         return (SourceFile) new AddSpringProperty(
                 kind.configurationProperty, kind.springData4DefaultValue, null, singletonList(path))
