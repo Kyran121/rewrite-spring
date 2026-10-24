@@ -73,7 +73,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
 
     @Override
     public TreeVisitor<?, ExecutionContext> getScanner(MongoValueRepresentationAccumulator acc) {
-        return MongoValueRepresentationScanner.scanner(acc);
+        return MongoValueRepresentationScanner.scanner(acc, false);
     }
 
     @Override
