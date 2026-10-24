@@ -40,7 +40,7 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
     }
 
     @Test
-    void runsRepresentationDiagnosticThroughComposite() {
+    void migratesDefaultsWithoutContradictorySearchMarkers() {
         rewriteRun(
           mavenProject("app",
             pomXml(
@@ -66,6 +66,15 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
             java(
               """
                 package com.example;
+                import org.springframework.boot.autoconfigure.SpringBootApplication;
+                @SpringBootApplication
+                class Application {}
+                """,
+              spec -> spec.path("src/main/java/com/example/Application.java")
+            ),
+            java(
+              """
+                package com.example;
 
                 import java.util.UUID;
                 import org.springframework.data.mongodb.core.mapping.Document;
@@ -83,7 +92,7 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
 
                 @Document
                 class Account {
-                    /*~~(missing MongoDB value representation configuration)~~>*/private UUID externalId;
+                    private UUID externalId;
                 }
                 """,
               spec -> spec.path("src/main/java/com/example/Account.java")
@@ -91,6 +100,7 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
             properties(
               null,
               """
+                spring.data.mongodb.representation.big-decimal=string
                 spring.mongodb.representation.uuid=java-legacy
                 """,
               spec -> spec.path("src/main/resources/application.properties")
