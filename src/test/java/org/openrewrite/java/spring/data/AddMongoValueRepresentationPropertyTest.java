@@ -132,4 +132,26 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
           )
         );
     }
+
+    @Test
+    void addsDefaultsWithoutBuildMetadataOrBootEntryPoint() {
+        rewriteRun(
+          mavenProject("app",
+            java("""
+              package com.example;
+              import java.util.UUID;
+              class EmbeddedValue {
+                  UUID externalId;
+              }
+              """, spec -> spec.path("src/main/java/com/example/EmbeddedValue.java")),
+            properties("""
+              server.port=8080
+              """, """
+              server.port=8080
+              spring.data.mongodb.representation.big-decimal=string
+              spring.mongodb.representation.uuid=java-legacy
+              """, spec -> spec.path("src/main/resources/application.properties"))
+          )
+        );
+    }
 }
