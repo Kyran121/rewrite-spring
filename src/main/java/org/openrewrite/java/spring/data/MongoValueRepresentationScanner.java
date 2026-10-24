@@ -21,7 +21,9 @@ import org.openrewrite.ExecutionContext;
 import org.openrewrite.Preconditions;
 import org.openrewrite.Tree;
 import org.openrewrite.TreeVisitor;
+import org.openrewrite.SourceFile;
 import org.openrewrite.java.AnnotationMatcher;
+import org.openrewrite.java.dependencies.DependencyInsight;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.MethodMatcher;
 import org.openrewrite.java.marker.JavaProject;
@@ -72,6 +74,10 @@ public final class MongoValueRepresentationScanner {
             new AnnotationMatcher("@org.springframework.data.annotation.Transient");
     private static final AnnotationMatcher ID =
             new AnnotationMatcher("@org.springframework.data.annotation.Id");
+    private static final AnnotationMatcher SPRING_BOOT_APPLICATION =
+            new AnnotationMatcher("@org.springframework.boot.autoconfigure.SpringBootApplication");
+    private static final AnnotationMatcher ENABLE_AUTO_CONFIGURATION =
+            new AnnotationMatcher("@org.springframework.boot.autoconfigure.EnableAutoConfiguration");
     private static final AnnotationMatcher PROFILE =
             new AnnotationMatcher("@org.springframework.context.annotation.Profile");
 
@@ -112,11 +118,25 @@ public final class MongoValueRepresentationScanner {
      */
     public static TreeVisitor<?, ExecutionContext> scanner(MongoValueRepresentationAccumulator acc) {
         TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(javaPrecondition(), javaScanner(acc));
+        TreeVisitor<?, ExecutionContext> bootDependency = new DependencyInsight("org.springframework.boot", "*", null, null).getVisitor();
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesScanner(acc);
         YamlIsoVisitor<ExecutionContext> yamlVisitor = yamlScanner(acc);
         return new TreeVisitor<Tree, ExecutionContext>() {
             @Override
             public @Nullable Tree visit(@Nullable Tree tree, ExecutionContext ctx) {
+                if (tree instanceof SourceFile) {
+                    SourceFile source = (SourceFile) tree;
+                    JavaProject project = SpringConfigFileSupport.javaProject(source);
+                    if (project != null && SpringConfigFileSupport.isMainSource(source)) {
+                        if (source instanceof JavaSourceFile) {
+                            acc.recordMainSource(project, source.getSourcePath());
+                        }
+                        if ("pom.xml".equals(source.getSourcePath().getFileName().toString()) &&
+                                bootDependency.visit(tree, ctx) != tree) {
+                            acc.markBootProject(project);
+                        }
+                    }
+                }
                 if (tree instanceof J.CompilationUnit) {
                     return javaVisitor.visit(tree, ctx);
                 }
@@ -138,6 +158,19 @@ public final class MongoValueRepresentationScanner {
                 JavaProject project = SpringConfigFileSupport.javaProject(cu);
                 return project == null || !SpringConfigFileSupport.isMainSource(cu) ?
                         cu : super.visitCompilationUnit(cu, ctx);
+            }
+
+            @Override
+            public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext ctx) {
+                J.ClassDeclaration visited = super.visitClassDeclaration(classDecl, ctx);
+                if (visited.getLeadingAnnotations().stream().anyMatch(annotation ->
+                        SPRING_BOOT_APPLICATION.matches(annotation) || ENABLE_AUTO_CONFIGURATION.matches(annotation))) {
+                    JavaProject project = SpringConfigFileSupport.javaProject(getCursor().firstEnclosingOrThrow(JavaSourceFile.class));
+                    if (project != null) {
+                        acc.markBootProject(project);
+                    }
+                }
+                return visited;
             }
 
             @Override
