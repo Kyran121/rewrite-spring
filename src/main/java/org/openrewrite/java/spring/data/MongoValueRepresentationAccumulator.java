@@ -39,6 +39,8 @@ public class MongoValueRepresentationAccumulator {
     private final Map<JavaProject, ConcurrentLinkedQueue<Occurrence>> occurrences = new ConcurrentHashMap<>();
     private final Map<JavaProject, ConcurrentLinkedQueue<ConfigurationIssue>> configurationIssues = new ConcurrentHashMap<>();
     private final Map<JavaProject, Path> preferredConfigurationSource = new ConcurrentHashMap<>();
+    private final Set<JavaProject> bootProjects = ConcurrentHashMap.newKeySet();
+    private final Map<JavaProject, Path> projectSourcePaths = new ConcurrentHashMap<>();
     private final Set<JavaProject> rowsInserted = ConcurrentHashMap.newKeySet();
 
     @Value
@@ -55,6 +57,39 @@ public class MongoValueRepresentationAccumulator {
         Path sourcePath;
         UUID treeId;
         MongoValueRepresentationKind kind;
+    }
+
+    public void markBootProject(JavaProject project) {
+        bootProjects.add(project);
+    }
+
+    public boolean isBootProject(JavaProject project) {
+        return bootProjects.contains(project);
+    }
+
+    public Set<JavaProject> bootProjects() {
+        return bootProjects;
+    }
+
+    public void recordMainSource(JavaProject project, Path path) {
+        projectSourcePaths.putIfAbsent(project, path);
+    }
+
+    public @Nullable Path mainSourcePath(JavaProject project) {
+        return projectSourcePaths.get(project);
+    }
+
+    public List<ConfigurationIssue> configurationIssuesIn(Path sourcePath, JavaProject project) {
+        List<ConfigurationIssue> issues = new ArrayList<>();
+        Queue<ConfigurationIssue> found = configurationIssues.get(project);
+        if (found != null) {
+            for (ConfigurationIssue issue : found) {
+                if (issue.getSourcePath().equals(sourcePath)) {
+                    issues.add(issue);
+                }
+            }
+        }
+        return issues;
     }
 
     public void markConfigured(MongoValueRepresentationKind kind, JavaProject project) {
