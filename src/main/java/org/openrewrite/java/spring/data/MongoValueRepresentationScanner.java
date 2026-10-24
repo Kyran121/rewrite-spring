@@ -24,6 +24,9 @@ import org.openrewrite.TreeVisitor;
 import org.openrewrite.SourceFile;
 import org.openrewrite.java.AnnotationMatcher;
 import org.openrewrite.java.dependencies.DependencyInsight;
+import org.openrewrite.gradle.search.FindPlugins;
+import org.openrewrite.maven.tree.MavenResolutionResult;
+import org.openrewrite.maven.tree.Pom;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.MethodMatcher;
 import org.openrewrite.java.marker.JavaProject;
@@ -121,6 +124,7 @@ public final class MongoValueRepresentationScanner {
                 new UsesType<>("org.springframework.boot.autoconfigure.SpringBootApplication", false),
                 new UsesType<>("org.springframework.boot.autoconfigure.EnableAutoConfiguration", false)), javaScanner(acc));
         TreeVisitor<?, ExecutionContext> bootDependency = new DependencyInsight("org.springframework.boot", "*", null, null).getVisitor();
+        TreeVisitor<?, ExecutionContext> bootPlugin = new FindPlugins("org.springframework.boot", null).getVisitor();
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesScanner(acc);
         YamlIsoVisitor<ExecutionContext> yamlVisitor = yamlScanner(acc);
         return new TreeVisitor<Tree, ExecutionContext>() {
@@ -128,15 +132,19 @@ public final class MongoValueRepresentationScanner {
             public @Nullable Tree visit(@Nullable Tree tree, ExecutionContext ctx) {
                 if (tree instanceof SourceFile) {
                     SourceFile source = (SourceFile) tree;
+                    String filename = source.getSourcePath().getFileName().toString();
+                    if ("pom.xml".equals(filename) || "build.gradle".equals(filename) ||
+                            "build.gradle.kts".equals(filename)) {
+                        if (bootDependency.visit(tree, ctx) != tree ||
+                                !"pom.xml".equals(filename) && bootPlugin.visit(tree, ctx) != tree ||
+                                hasBootParentOrBom(source)) {
+                            acc.recordBootBuild(source.getSourcePath());
+                        }
+                    }
                     JavaProject project = SpringConfigFileSupport.javaProject(source);
-                    if (project != null && SpringConfigFileSupport.isMainSource(source)) {
-                        if (source instanceof JavaSourceFile) {
-                            acc.recordMainSource(project, source.getSourcePath());
-                        }
-                        if ("pom.xml".equals(source.getSourcePath().getFileName().toString()) &&
-                                bootDependency.visit(tree, ctx) != tree) {
-                            acc.markBootProject(project);
-                        }
+                    if (project != null && source instanceof JavaSourceFile &&
+                            SpringConfigFileSupport.isMainSource(source)) {
+                        acc.recordMainSource(project, source.getSourcePath());
                     }
                 }
                 if (tree instanceof J.CompilationUnit) {
@@ -151,6 +159,18 @@ public final class MongoValueRepresentationScanner {
                 return tree;
             }
         };
+    }
+
+    private static boolean hasBootParentOrBom(SourceFile source) {
+        MavenResolutionResult resolution = source.getMarkers().findFirst(MavenResolutionResult.class).orElse(null);
+        if (resolution == null) {
+            return false;
+        }
+        Pom pom = resolution.getPom().getRequested();
+        return pom.getParent() != null && "org.springframework.boot".equals(pom.getParent().getGroupId()) ||
+                pom.getDependencyManagement().stream().anyMatch(dependency ->
+                        "org.springframework.boot".equals(dependency.getGroupId()) &&
+                        "spring-boot-dependencies".equals(dependency.getArtifactId()));
     }
 
     private static JavaIsoVisitor<ExecutionContext> javaScanner(MongoValueRepresentationAccumulator acc) {
