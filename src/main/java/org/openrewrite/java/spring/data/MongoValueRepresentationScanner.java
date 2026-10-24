@@ -122,10 +122,14 @@ public final class MongoValueRepresentationScanner {
      * each delegate below is a single, self-contained visitor rather than several chained together.
      */
     public static TreeVisitor<?, ExecutionContext> scanner(MongoValueRepresentationAccumulator acc) {
+        return scanner(acc, true);
+    }
+
+    public static TreeVisitor<?, ExecutionContext> scanner(MongoValueRepresentationAccumulator acc, boolean scanFields) {
         TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(Preconditions.or(javaPrecondition(),
                 new UsesType<>("org.springframework.boot.autoconfigure.SpringBootApplication", false),
-                new UsesType<>("org.springframework.boot.autoconfigure.EnableAutoConfiguration", false)), javaScanner(acc));
-        TreeVisitor<?, ExecutionContext> kotlinVisitor = kotlinScanner(acc);
+                new UsesType<>("org.springframework.boot.autoconfigure.EnableAutoConfiguration", false)), javaScanner(acc, scanFields));
+        TreeVisitor<?, ExecutionContext> kotlinVisitor = kotlinScanner(acc, scanFields);
         TreeVisitor<?, ExecutionContext> bootDependency = new DependencyInsight("org.springframework.boot", "*", null, null).getVisitor();
         TreeVisitor<?, ExecutionContext> bootPlugin = new FindPlugins("org.springframework.boot", null).getVisitor();
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesScanner(acc);
@@ -138,6 +142,7 @@ public final class MongoValueRepresentationScanner {
                     String filename = source.getSourcePath().getFileName().toString();
                     if ("pom.xml".equals(filename) || "build.gradle".equals(filename) ||
                             "build.gradle.kts".equals(filename)) {
+                        acc.recordBuildFile();
                         if (bootDependency.visit(tree, ctx) != tree ||
                                 !"pom.xml".equals(filename) && bootPlugin.visit(tree, ctx) != tree ||
                                 hasBootParentOrBom(source)) {
@@ -179,7 +184,7 @@ public final class MongoValueRepresentationScanner {
                         "spring-boot-dependencies".equals(dependency.getArtifactId()));
     }
 
-    private static JavaIsoVisitor<ExecutionContext> javaScanner(MongoValueRepresentationAccumulator acc) {
+    private static JavaIsoVisitor<ExecutionContext> javaScanner(MongoValueRepresentationAccumulator acc, boolean scanFields) {
         return new JavaIsoVisitor<ExecutionContext>() {
             @Override
             public J.CompilationUnit visitCompilationUnit(J.CompilationUnit cu, ExecutionContext ctx) {
@@ -223,14 +228,16 @@ public final class MongoValueRepresentationScanner {
             public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations,
                                                                      ExecutionContext ctx) {
                 J.VariableDeclarations visitedDeclarations = super.visitVariableDeclarations(declarations, ctx);
-                recordMappedFields(getCursor(), visitedDeclarations, acc);
+                if (scanFields) {
+                    recordMappedFields(getCursor(), visitedDeclarations, acc);
+                }
                 return visitedDeclarations;
             }
         };
     }
 
 
-    private static KotlinIsoVisitor<ExecutionContext> kotlinScanner(MongoValueRepresentationAccumulator acc) {
+    private static KotlinIsoVisitor<ExecutionContext> kotlinScanner(MongoValueRepresentationAccumulator acc, boolean scanFields) {
         return new KotlinIsoVisitor<ExecutionContext>() {
             @Override
             public K.CompilationUnit visitCompilationUnit(K.CompilationUnit cu, ExecutionContext ctx) {
@@ -255,7 +262,9 @@ public final class MongoValueRepresentationScanner {
             @Override
             public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations, ExecutionContext ctx) {
                 J.VariableDeclarations visited = super.visitVariableDeclarations(declarations, ctx);
-                recordMappedFields(getCursor(), visited, acc);
+                if (scanFields) {
+                    recordMappedFields(getCursor(), visited, acc);
+                }
                 return visited;
             }
 
