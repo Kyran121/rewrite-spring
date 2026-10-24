@@ -39,6 +39,8 @@ import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaSourceFile;
 import org.openrewrite.java.tree.JavaType;
 import org.openrewrite.java.tree.TypeUtils;
+import org.openrewrite.kotlin.KotlinIsoVisitor;
+import org.openrewrite.kotlin.tree.K;
 import org.openrewrite.properties.PropertiesIsoVisitor;
 import org.openrewrite.properties.search.FindProperties;
 import org.openrewrite.properties.tree.Properties;
@@ -123,6 +125,7 @@ public final class MongoValueRepresentationScanner {
         TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(Preconditions.or(javaPrecondition(),
                 new UsesType<>("org.springframework.boot.autoconfigure.SpringBootApplication", false),
                 new UsesType<>("org.springframework.boot.autoconfigure.EnableAutoConfiguration", false)), javaScanner(acc));
+        TreeVisitor<?, ExecutionContext> kotlinVisitor = kotlinScanner(acc);
         TreeVisitor<?, ExecutionContext> bootDependency = new DependencyInsight("org.springframework.boot", "*", null, null).getVisitor();
         TreeVisitor<?, ExecutionContext> bootPlugin = new FindPlugins("org.springframework.boot", null).getVisitor();
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesScanner(acc);
@@ -149,6 +152,9 @@ public final class MongoValueRepresentationScanner {
                 }
                 if (tree instanceof J.CompilationUnit) {
                     return javaVisitor.visit(tree, ctx);
+                }
+                if (tree instanceof K.CompilationUnit) {
+                    return kotlinVisitor.visit(tree, ctx);
                 }
                 if (tree instanceof Properties.File) {
                     return propertiesVisitor.visit(tree, ctx);
@@ -217,32 +223,88 @@ public final class MongoValueRepresentationScanner {
             public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations,
                                                                      ExecutionContext ctx) {
                 J.VariableDeclarations visitedDeclarations = super.visitVariableDeclarations(declarations, ctx);
-                JavaSourceFile source = getCursor().firstEnclosingOrThrow(JavaSourceFile.class);
-                JavaProject project = SpringConfigFileSupport.javaProject(source);
-                J.ClassDeclaration owner = getCursor().firstEnclosing(J.ClassDeclaration.class);
-                if (project == null || owner == null || getCursor().firstEnclosing(J.MethodDeclaration.class) != null ||
-                        !isExplicitlyMongoMapped(owner, visitedDeclarations) || isIgnoredField(visitedDeclarations)) {
-                    return visitedDeclarations;
-                }
-                String owningType = owner.getType() == null ? owner.getSimpleName() :
-                        owner.getType().getFullyQualifiedName();
-                boolean uuid = containsPersistedType(visitedDeclarations.getType(), UUID_TYPE);
-                boolean bigNumber = (containsPersistedType(visitedDeclarations.getType(), BIG_DECIMAL_TYPE) ||
-                        containsPersistedType(visitedDeclarations.getType(), BIG_INTEGER_TYPE)) &&
-                        !hasExplicitFieldTargetType(visitedDeclarations);
-                for (J.VariableDeclarations.NamedVariable variable : visitedDeclarations.getVariables()) {
-                    if (uuid) {
-                        acc.addOccurrence(project, new Occurrence(source.getSourcePath(), owner.getId(), owningType,
-                                variable.getSimpleName(), MongoValueRepresentationKind.UUID));
-                    }
-                    if (bigNumber && !isExcludedBigIntegerId(visitedDeclarations, variable)) {
-                        acc.addOccurrence(project, new Occurrence(source.getSourcePath(), owner.getId(), owningType,
-                                variable.getSimpleName(), MongoValueRepresentationKind.BIG_NUMBER));
-                    }
-                }
+                recordMappedFields(getCursor(), visitedDeclarations, acc);
                 return visitedDeclarations;
             }
         };
+    }
+
+
+    private static KotlinIsoVisitor<ExecutionContext> kotlinScanner(MongoValueRepresentationAccumulator acc) {
+        return new KotlinIsoVisitor<ExecutionContext>() {
+            @Override
+            public K.CompilationUnit visitCompilationUnit(K.CompilationUnit cu, ExecutionContext ctx) {
+                JavaProject project = SpringConfigFileSupport.javaProject(cu);
+                return project == null || !SpringConfigFileSupport.isMainSource(cu) ?
+                        cu : super.visitCompilationUnit(cu, ctx);
+            }
+
+            @Override
+            public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration classDecl, ExecutionContext ctx) {
+                J.ClassDeclaration visited = super.visitClassDeclaration(classDecl, ctx);
+                if (visited.getLeadingAnnotations().stream().anyMatch(annotation ->
+                        SPRING_BOOT_APPLICATION.matches(annotation) || ENABLE_AUTO_CONFIGURATION.matches(annotation))) {
+                    JavaProject project = SpringConfigFileSupport.javaProject(getCursor().firstEnclosingOrThrow(JavaSourceFile.class));
+                    if (project != null) {
+                        acc.markBootProject(project);
+                    }
+                }
+                return visited;
+            }
+
+            @Override
+            public J.VariableDeclarations visitVariableDeclarations(J.VariableDeclarations declarations, ExecutionContext ctx) {
+                J.VariableDeclarations visited = super.visitVariableDeclarations(declarations, ctx);
+                recordMappedFields(getCursor(), visited, acc);
+                return visited;
+            }
+
+            @Override
+            public J.MethodInvocation visitMethodInvocation(J.MethodInvocation method, ExecutionContext ctx) {
+                J.MethodInvocation visited = super.visitMethodInvocation(method, ctx);
+                JavaSourceFile source = getCursor().firstEnclosingOrThrow(JavaSourceFile.class);
+                JavaProject project = SpringConfigFileSupport.javaProject(source);
+                if (project != null) {
+                    boolean gated = isProfileGated(getCursor());
+                    if (UUID_REPRESENTATION.matches(visited)) {
+                        recordJavaConfigurationAttempt(MongoValueRepresentationKind.UUID, visited, source, project, acc, gated);
+                    }
+                    if (BIG_NUMBER_REPRESENTATION.matches(visited)) {
+                        recordJavaConfigurationAttempt(MongoValueRepresentationKind.BIG_NUMBER, visited, source, project, acc, gated);
+                    }
+                }
+                return visited;
+            }
+        };
+    }
+
+    private static void recordMappedFields(Cursor cursor, J.VariableDeclarations declarations,
+                                           MongoValueRepresentationAccumulator acc) {
+        JavaSourceFile source = cursor.firstEnclosingOrThrow(JavaSourceFile.class);
+        JavaProject project = SpringConfigFileSupport.javaProject(source);
+        J.ClassDeclaration owner = cursor.firstEnclosing(J.ClassDeclaration.class);
+        if (project == null || owner == null ||
+                cursor.firstEnclosing(J.MethodDeclaration.class) != null &&
+                cursor.firstEnclosing(K.Constructor.class) == null ||
+                !isExplicitlyMongoMapped(owner, declarations) || isIgnoredField(declarations)) {
+            return;
+        }
+        String owningType = owner.getType() == null ? owner.getSimpleName() :
+                owner.getType().getFullyQualifiedName();
+        boolean uuid = containsPersistedType(declarations.getType(), UUID_TYPE);
+        boolean bigNumber = (containsPersistedType(declarations.getType(), BIG_DECIMAL_TYPE) ||
+                containsPersistedType(declarations.getType(), BIG_INTEGER_TYPE)) &&
+                !hasExplicitFieldTargetType(declarations);
+        for (J.VariableDeclarations.NamedVariable variable : declarations.getVariables()) {
+            if (uuid) {
+                acc.addOccurrence(project, new Occurrence(source.getSourcePath(), owner.getId(), owningType,
+                        variable.getSimpleName(), MongoValueRepresentationKind.UUID));
+            }
+            if (bigNumber && !isExcludedBigIntegerId(declarations, variable)) {
+                acc.addOccurrence(project, new Occurrence(source.getSourcePath(), owner.getId(), owningType,
+                        variable.getSimpleName(), MongoValueRepresentationKind.BIG_NUMBER));
+            }
+        }
     }
 
     private static PropertiesIsoVisitor<ExecutionContext> propertiesScanner(MongoValueRepresentationAccumulator acc) {
