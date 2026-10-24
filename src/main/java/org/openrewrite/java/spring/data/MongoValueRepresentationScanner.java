@@ -345,7 +345,11 @@ public final class MongoValueRepresentationScanner {
                         scanYamlProperty(documents, project, acc, kind, kind.legacyConfigurationProperty, baseFile);
                     }
                 }
-                if (baseFile) {
+                if (baseFile && documents.getDocuments().stream().anyMatch(document -> {
+                    Yaml.Documents isolated = documents.withDocuments(java.util.Collections.singletonList(document));
+                    return FindProperty.find(isolated, "spring.config.activate.on-profile", true).isEmpty() &&
+                            FindProperty.find(isolated, "spring.profiles", true).isEmpty();
+                })) {
                     acc.mergePreferredConfigurationSource(project, documents.getSourcePath());
                 }
                 return documents;
