@@ -79,8 +79,8 @@ class AddMongoValueRepresentationPropertyTest extends MongoValueRepresentationTe
             properties("""
               spring.mongodb.representation.uuid=standard
               """, """
-              spring.mongodb.representation.uuid=standard
               spring.data.mongodb.representation.big-decimal=string
+              spring.mongodb.representation.uuid=standard
               """, spec -> spec.path("src/main/resources/application.properties"))
           )
         );
