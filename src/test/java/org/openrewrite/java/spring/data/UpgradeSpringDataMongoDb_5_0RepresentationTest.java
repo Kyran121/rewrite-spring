@@ -35,6 +35,10 @@ class UpgradeSpringDataMongoDb_5_0RepresentationTest implements RewriteTest {
             """
               package org.springframework.data.mongodb.core.mapping;
               public @interface Document {}
+              """,
+            """
+              package org.springframework.boot.autoconfigure;
+              public @interface SpringBootApplication {}
               """
           ));
     }
