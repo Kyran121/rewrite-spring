@@ -333,7 +333,7 @@ public final class MongoValueRepresentationScanner {
     private static boolean isProfileSpecificPropertiesEntry(Properties.File file, Properties.Entry target) {
         java.util.List<Properties.Content> section = new java.util.ArrayList<>();
         for (Properties.Content content : file.getContent()) {
-            if (content instanceof Properties.Comment && content.printAll().trim().matches("[#!]\\\\s*---")) {
+            if (content instanceof Properties.Comment && "---".equals(((Properties.Comment) content).getMessage().trim())) {
                 if (section.contains(target)) {
                     return hasProfileActivation(section);
                 }
