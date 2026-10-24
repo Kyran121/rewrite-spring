@@ -117,7 +117,9 @@ public final class MongoValueRepresentationScanner {
      * each delegate below is a single, self-contained visitor rather than several chained together.
      */
     public static TreeVisitor<?, ExecutionContext> scanner(MongoValueRepresentationAccumulator acc) {
-        TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(javaPrecondition(), javaScanner(acc));
+        TreeVisitor<?, ExecutionContext> javaVisitor = Preconditions.check(Preconditions.or(javaPrecondition(),
+                new UsesType<>("org.springframework.boot.autoconfigure.SpringBootApplication", false),
+                new UsesType<>("org.springframework.boot.autoconfigure.EnableAutoConfiguration", false)), javaScanner(acc));
         TreeVisitor<?, ExecutionContext> bootDependency = new DependencyInsight("org.springframework.boot", "*", null, null).getVisitor();
         PropertiesIsoVisitor<ExecutionContext> propertiesVisitor = propertiesScanner(acc);
         YamlIsoVisitor<ExecutionContext> yamlVisitor = yamlScanner(acc);
