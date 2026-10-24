@@ -128,7 +128,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
 
     private static @Nullable MongoValueRepresentationKind configurationIssueKind(
             MongoValueRepresentationAccumulator acc, @Nullable JavaProject project, Path sourcePath, UUID treeId) {
-        if (project == null) {
+        if (project == null || !acc.isBootProject(project)) {
             return null;
         }
         for (ConfigurationIssue issue : acc.configurationIssuesIn(sourcePath, project)) {
@@ -220,7 +220,7 @@ public class AddMongoValueRepresentationProperty extends ScanningRecipe<MongoVal
     }
 
     /**
-     * Generates a baseline {@code application.properties} for a project with affected fields but no
+     * Generates a baseline {@code application.properties} for a Spring Boot project with no
      * base Spring configuration file — only a profile-specific one, or none at all — fully populated
      * up front with the Spring Data MongoDB 4 defaults so no further cycle is needed to finish it off.
      */
